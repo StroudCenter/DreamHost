@@ -7,15 +7,10 @@ Created by Sara Geleskie Damiano on 5/16/2016 at 6:14 PM
 
 """
 
-import suds
 import pymysql
 import pandas as pd
-import time
 import datetime
 import pytz
-import base64
-import sys
-import socket
 import numpy as np
 
 # Bring in all of the database connection information.
@@ -132,7 +127,6 @@ def convert_python_time_to_rtc(pydatetime, timezone):
     unix_time = (datetime_aware - timezone.localize(datetime.datetime(1970, 1, 1))).total_seconds()
     sec_from_rtc_epoch = unix_time - 946684800
     return sec_from_rtc_epoch
-
 
 
 def get_data_from_dreamhost_table(table, column, series_start=None, series_end=None,

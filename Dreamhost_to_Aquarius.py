@@ -15,9 +15,9 @@ import pytz
 import os
 import sys
 import argparse
-import aq_functions as aq
+import Aquarius.utils as aq_utils
+import DreamHost.utils as dh_utils
 import time
-import numpy as np
 
 __author__ = 'Sara Geleskie Damiano'
 __contact__ = 'sdamiano@stroudcenter.org'
@@ -125,7 +125,7 @@ def check_valid_connection():
     start_check = datetime.datetime.now()
     if debug:
         print "Checking for valid connection"
-    is_valid, error = aq.check_aq_connection()
+    is_valid, error = aq_utils.check_aq_connection()
     if not is_valid:
         # If the connection has died, print out a note and write to the log, then kill script.
         if debug:
@@ -154,13 +154,13 @@ check_valid_connection()
 if append_start is None:
     append_start_dt = None
 else:
-    append_start_dt_naive = datetime.datetime.strptime(append_start,"%Y-%m-%d %H:%M:%S")
+    append_start_dt_naive = datetime.datetime.strptime(append_start, "%Y-%m-%d %H:%M:%S")
     append_start_dt = append_start_dt_naive.replace(tzinfo=eastern_standard_time)
 
 if append_end is None:
     append_end_dt = None
 else:
-    append_end_dt_naive = datetime.datetime.strptime(append_end,"%Y-%m-%d %H:%M:%S")
+    append_end_dt_naive = datetime.datetime.strptime(append_end, "%Y-%m-%d %H:%M:%S")
     append_end_dt = append_end_dt_naive.replace(tzinfo=eastern_standard_time)
 
 if append_start is None and append_end is None and past_hours_to_append is not None:
@@ -170,8 +170,8 @@ if append_start is None and append_end is None and past_hours_to_append is not N
 
 
 # Get data for all series that are available
-AqSeries = aq.get_dreamhost_series(query_start=append_start_dt, query_end=append_end_dt,
-                                   table=table, column=column, debug=debug)
+AqSeries = aq_utils.get_dreamhost_series(query_start=append_start_dt, query_end=append_end_dt,
+                                         table=table, column=column, debug=debug)
 if Log_to_file:
     text_file.write("%s series found with corresponding time series in Aquarius \n \n" % (len(AqSeries)))
     text_file.write("Series, Table, Column, NumericIdentifier, TextIdentifier, NumPointsAppended, AppendToken  \n")
@@ -188,7 +188,7 @@ for ts_numeric_id, loc_numeric_id, table_name, table_column_name, series_tz, ser
         print "Attempting to append series %s of %s" % (i, len(AqSeries))
         print "Data being appended to Time Series # %s" % ts_numeric_id
 
-    aq_series_timezone = aq.get_aquarius_timezone(ts_numeric_id, loc_numeric_id)
+    aq_series_timezone = aq_utils.get_aquarius_timezone(ts_numeric_id, loc_numeric_id)
     if debug:
         print "Time Zone of Series on Dreamhost is %s" % series_tz
         print "Time Zone of Series in Aquarius is %s" % aq_series_timezone
@@ -207,13 +207,13 @@ for ts_numeric_id, loc_numeric_id, table_name, table_column_name, series_tz, ser
     else:
         query_end = append_end_dt.astimezone(series_tz)
 
-    data_table = aq.get_data_from_dreamhost_table(table_name, table_column_name,
-                                                  series_start, series_end,
-                                                  query_start=query_start, query_end=query_end,
-                                                  debug=debug)
+    data_table = dh_utils.get_data_from_dreamhost_table(table_name, table_column_name,
+                                                        series_start, series_end,
+                                                        query_start=query_start, query_end=query_end,
+                                                        debug=debug)
 
-    append_bytes = aq.create_appendable_csv(data_table)
-    AppendResult = aq.aq_timeseries_append(ts_numeric_id, append_bytes, debug=debug)
+    append_bytes = aq_utils.create_appendable_csv(data_table)
+    AppendResult = aq_utils.aq_timeseries_append(ts_numeric_id, append_bytes, debug=debug)
     # TODO: stop execution of further requests after an error.
     if Log_to_file:
         text_file.write("%s, %s, %s, %s, %s, %s, %s \n"
