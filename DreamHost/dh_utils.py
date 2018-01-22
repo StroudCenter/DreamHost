@@ -85,11 +85,11 @@ def get_dreamhost_data(required_column=None, query_start=None, query_end=None,
     if data_column_name is not None:
         str4 = " AND TableColumnName = '" + data_column_name + "' "
 
-    # Look for Dataseries that have an associated Aquarius Time Series ID
+    # Look for Data series that have an associated Aquarius Time Series ID
     query_text = \
         "SELECT DISTINCT *" \
-        " FROM Series_for_midStream " \
-        " WHERE " + required_column + " != 0 " + str1 + str2 + str3 + str4 + \
+        " FROM Series_for_midStream" \
+        " WHERE " + required_column + " is not NULL " + str1 + str2 + str3 + str4 + \
         " ;"
 
     if debug:
@@ -102,6 +102,15 @@ def get_dreamhost_data(required_column=None, query_start=None, query_end=None,
 
     # Create a pandas data frame from the query
     series_table = pd.read_sql(query_text, conn)
+
+    site_query = \
+        "SELECT DISTINCT SiteID, AQLocationID, EnviroDIYToken, SamplingFeatureGUID" \
+        " FROM Sites_for_midStream" \
+        " WHERE AQLocationID is not NULL OR EnviroDIYToken is not NULL"
+    sites = pd.read_sql(site_query, conn)
+    sites['AQLocationID'] = sites['AQLocationID'].fillna(0).astype('int64')
+
+    series_table = series_table.merge(sites, on="SiteID")
 
     if debug:
         print "which returns %s series" % len(series_table.index)
@@ -123,10 +132,10 @@ def get_dreamhost_data(required_column=None, query_start=None, query_end=None,
 
     # Localize the datetime columns based on the timezone name
     series_table['DateTimeSeriesStart'] = \
-        series_table.apply(lambda row1: row1.DateTimeSeriesStart.replace(tzinfo=pytz.timezone(row1.utc_offset_string)),
+        series_table.apply(lambda row1: pytz.timezone(row1.utc_offset_string).localize(row1.DateTimeSeriesStart),
                            axis=1)
     series_table['DateTimeSeriesEnd'] = \
-        series_table.apply(lambda row1: row1.DateTimeSeriesEnd.replace(tzinfo=pytz.timezone(row1.utc_offset_string)),
+        series_table.apply(lambda row1: pytz.timezone(row1.utc_offset_string).localize(row1.DateTimeSeriesEnd),
                            axis=1)
 
     # Verify the actual date and time to pick from the dream host tables
@@ -144,23 +153,35 @@ def get_dreamhost_data(required_column=None, query_start=None, query_end=None,
         data_dt = get_data_from_dreamhost_table(table=row.TableName, column=row.TableColumnName,
                                                 start_dt=row.DateTimeQueryStart, end_dt=row.DateTimeQueryEnd,
                                                 debug=debug)
-        data_dt['SeriesID'] = row.SeriesID
+        series_table.loc[idx, 'NumberDataValues'] = len(data_dt.index)
+        if len(data_dt.index) > 0:
+            data_dt['SeriesID'] = row.SeriesID
 
-        series_table_with_data = series_table_with_data.merge(data_dt, how='outer', on='SeriesID')
-        if 'data_value_x' in series_table_with_data:
-            series_table_with_data['data_value'] = \
-                series_table_with_data['data_value_x'].fillna(series_table_with_data['data_value_y'])
-            series_table_with_data.drop('data_value_x', axis=1, inplace=True)
-            series_table_with_data.drop('data_value_y', axis=1, inplace=True)
+            series_table_with_data = series_table_with_data.merge(data_dt, how='outer', on='SeriesID')
+            if 'data_value_x' in series_table_with_data:
+                series_table_with_data['data_value'] = \
+                    series_table_with_data['data_value_x'].fillna(series_table_with_data['data_value_y'])
+                series_table_with_data.drop('data_value_x', axis=1, inplace=True)
+                series_table_with_data.drop('data_value_y', axis=1, inplace=True)
 
-            series_table_with_data['timestamp'] = \
-                series_table_with_data['timestamp_x'].fillna(series_table_with_data['timestamp_y'])
-            series_table_with_data.drop('timestamp_x', axis=1, inplace=True)
-            series_table_with_data.drop('timestamp_y', axis=1, inplace=True)
+                series_table_with_data['timestamp'] = \
+                    series_table_with_data['timestamp_x'].fillna(series_table_with_data['timestamp_y'])
+                series_table_with_data.drop('timestamp_x', axis=1, inplace=True)
+                series_table_with_data.drop('timestamp_y', axis=1, inplace=True)
+
 
     # Close out the database connections
     cur.close()  # close the database cursor
     conn.close()  # close the database connection
+
+    # Check number of values returned
+    series_table_with_data["NumberDataValues"] = \
+        series_table_with_data.groupby(["SeriesID"])['data_value'].transform('count')
+    # Remove rows where no values were returned
+    series_table_with_data = \
+        series_table_with_data.drop(series_table_with_data[series_table_with_data.NumberDataValues == 0].index)
+    series_table = \
+        series_table.drop(series_table[series_table.NumberDataValues == 0].index)
 
     return series_table, series_table_with_data
 
@@ -227,7 +248,8 @@ def get_data_from_dreamhost_table(table, column, start_dt=None, end_dt=None, deb
     # remove old datetime column
     if len(values_table) > 0:
         if table in ["davis", "CRDavis"]:
-            values_table['timestamp'] = values_table[dt_col]
+            values_table['timestamp'] = \
+                values_table.apply(lambda row1: pytz.utc.localize(row1.mbutcdatetime).astimezone(start_tz), axis=1)
             values_table.drop(dt_col, axis=1, inplace=True)
         else:
             # Need to convert arduino logger time into unix time (add 946684800)

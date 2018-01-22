@@ -11,23 +11,21 @@ This uses command line arguments to decide what to append
 """
 
 import datetime
-import time
 import pytz
 import os
 import sys
 import argparse
-import numpy as np
-import Aquarius.aq_utils as aq_utils
 import DreamHost.dh_utils as dh_utils
+import requests
 
 __author__ = 'Sara Geleskie Damiano'
 __contact__ = 'sdamiano@stroudcenter.org'
 
 # Set up initial parameters - these are rewritten when run from the command prompt.
-past_hours_to_append = 1  # Sets number of hours in the past to append.  Use None for all time
-append_start = None  # Sets start time for the append **in EST**, use None for all time
+past_hours_to_append = None  # Sets number of hours in the past to append.  Use None for all time
+# append_start = None  # Sets start time for the append **in EST**, use None for all time
 append_end = None  # Sets end time for the append **in EST**, use None for all time
-# append_start = "2017-04-01 00:00:00"  # Sets start time for the append **in EST**, use None for all time
+append_start = "2018-01-01 00:00:00"  # Sets start time for the append **in EST**, use None for all time
 # append_end = "2017-05-01 00:00:00"  # Sets end time for the append **in EST**, use None for all time
 table = None  # Selects a single table to append from, often a logger number, use None for all loggers
 column = None  # Selects a single column to append from, often a variable code, use None for all columns
@@ -79,7 +77,7 @@ def start_log():
 
     # Open file for logging
     if Log_to_file:
-        logfile = script_directory + "\Aquarius\AppendLogs\AppendLog_" + start_log_dt_loc.strftime("%Y%m%d") + ".txt"
+        logfile = script_directory + "\EnviroDIY\AppendLogs\AppendLog_" + start_log_dt_loc.strftime("%Y%m%d") + ".txt"
         if debug:
             print "Log being written to: %s" % logfile
         open_log_file = open(logfile, "a+")
@@ -142,40 +140,47 @@ if append_start is None and append_end is None and past_hours_to_append is not N
 
 
 # Get data for all series that are available
-AqSeries, AqData = dh_utils.get_dreamhost_data(required_column='AQTimeSeriesID',
-                                               query_start=append_start_dt, query_end=append_end_dt,
-                                               data_table_name=table, data_column_name=column, debug=debug)
+DIYSeries, DIYData = dh_utils.get_dreamhost_data(required_column='TimeSeriesGUID',
+                                                 query_start=append_start_dt, query_end=append_end_dt,
+                                                 data_table_name=table, data_column_name=column, debug=debug)
+
 if Log_to_file:
-    text_file.write("%s series found with corresponding time series in Aquarius \n \n" % (len(AqSeries.index)))
+    text_file.write("%s series found with corresponding time series on the EnviroDIY data portal \n \n"
+                    % (len(DIYSeries.index)))
 
-if len(AqData.index) > 0:
+if len(DIYData.index) > 0:
     if Log_to_file:
-        text_file.write("Series, Table, Column, NumericIdentifier, TextIdentifier, NumPointsAppended, AppendToken  \n")
+        text_file.write("Table, Timestamp, HTTPAppendResult  \n")
 
-    # Get the corresponding Aquarius series time zones for each time series
-    get_aq_timezone = np.vectorize(aq_utils.get_aquarius_timezone)
-    AqSeries['AQTimeZone'] = get_aq_timezone(AqSeries['AQTimeSeriesID'], AqSeries['AQLocationID'])
-    AqSeries2 = AqSeries.loc[:, ['SeriesID', 'AQTimeZone']]
+    for name, group in DIYData.groupby(['EnviroDIYToken', 'SamplingFeatureGUID', 'timestamp']):
+        json_string = '{\r\n"sampling_feature": "'
+        json_string += group.iloc[0].SamplingFeatureGUID
+        json_string += '",\r\n"timestamp": "'
+        json_string += group.iloc[0].timestamp.isoformat()
+        json_string += '"'
+        for idx, row in group.iterrows():
+            json_string += ',\r\n    "'
+            json_string += row.TimeSeriesGUID
+            json_string += '": '
+            json_string += str(row.data_value)
+        json_string += '\r\n}'
 
-    # Merge the Aquarius timezone with the data
-    AqData = AqData.merge(AqSeries2, how='outer', on='SeriesID')
-    # Localize data to the Aquarius timezone
-    AqData['AQLocalizedTimeStamp'] = AqData.apply(
-        lambda row1: row1.timestamp.astimezone(row1.AQTimeZone), axis=1)
+        response = requests.post(url='http://data.envirodiy.org/api/data-stream/',
+                                 headers={"TOKEN": group.iloc[0].EnviroDIYToken, 'Content-Type': 'application/json'},
+                                 data=json_string)
+        if debug:
+            print group.iloc[0].TableName, "-", group.iloc[0].timestamp.isoformat(), "-", response.status_code
+            # print "    ", response.request.method, response.request.path_url
+            # print "    ", response.request.headers
+            # print "    ", response.request.body
+            # print response.request.body
+            # print "    ", "Response status code: %s" % response.status_code
+            if response.status_code > 205:
+                print "    ", response.text
 
-    i = 1
-    for name, group in AqData.groupby('AQTimeSeriesID'):
-        append_bytes = aq_utils.create_appendable_csv(group)
-        AppendResult = aq_utils.aq_timeseries_append(name, append_bytes, debug=debug)
-        # TODO: stop execution of further requests after an error.
         if Log_to_file:
-            text_file.write("%s, %s, %s, %s, %s, %s, %s \n"
-                            % (i, group['TableName'].iloc[0], group['TableColumnName'].iloc[0],
-                               name, AppendResult.TsIdentifier,
-                               AppendResult.NumPointsAppended, AppendResult.AppendToken))
-        time.sleep(1)
-        i += 1
-
+            text_file.write("%s, %s, %s  \n" %
+                            (group.iloc[0].TableName, group.iloc[0].timestamp, response.status_code))
 
 # Close out the text file
 end_log(text_file, start_datetime_utc)
