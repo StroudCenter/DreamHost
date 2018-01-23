@@ -19,7 +19,7 @@ import pytz
 import argparse
 import sys
 
-from dbinfo import aqdb_host, aqdb_name, aqdb_user, aqdb_password
+from Aquarius.aq_dbinfo import aqdb_host, aqdb_name, aqdb_user, aqdb_password
 
 __author__ = 'Sara Geleskie Damiano'
 __contact__ = 'sdamiano@stroudcenter.org'

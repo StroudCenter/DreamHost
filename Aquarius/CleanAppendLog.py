@@ -18,8 +18,8 @@ import sys
 import pymssql
 import pymysql
 
-from dbinfo import aqdb_host, aqdb_name, aqdb_user, aqdb_password
-from dbinfo import aq_username, dbhost, dbname, dbuser, dbpswd
+from Aquarius.aq_dbinfo import aq_username, aqdb_host, aqdb_name, aqdb_user, aqdb_password
+from DreamHost.dh_dbinfo import dbhost, dbname, dbuser, dbpswd
 
 __author__ = 'Sara Geleskie Damiano'
 __contact__ = 'sdamiano@stroudcenter.org'
@@ -92,6 +92,7 @@ def get_event_log_length():
     conn_f.close()    # close the database connection
 
     return events
+
 
 # Check the length of the event log prior to cleaning
 pre_cleaning = get_event_log_length()
