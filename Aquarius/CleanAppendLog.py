@@ -18,8 +18,8 @@ import sys
 import pymssql
 import pymysql
 
-from Aquarius.aq_dbinfo import aq_username, aqdb_host, aqdb_name, aqdb_user, aqdb_password
-from DreamHost.dh_dbinfo import dbhost, dbname, dbuser, dbpswd
+from aq_dbinfo import aq_username, aqdb_host, aqdb_name, aqdb_user, aqdb_password, \
+    dh_dbhost, dh_dbname, dh_dbuser, dh_dbpswd
 
 __author__ = 'Sara Geleskie Damiano'
 __contact__ = 'sdamiano@stroudcenter.org'
@@ -103,7 +103,7 @@ if Log_to_file:
 
 
 # Look for the aop id of dataseries that are being appended by the API from dreamhost
-conn = pymysql.connect(host=dbhost, db=dbname, user=dbuser, passwd=dbpswd)
+conn = pymysql.connect(host=dh_dbhost, db=dh_dbname, user=dh_dbuser, passwd=dh_dbpswd)
 cur = conn.cursor()
 
 cur.execute("""

@@ -10,6 +10,7 @@ from a DreamHost database to Stroud's Aquarius server.
 This uses command line arguments to decide what to append
 """
 
+import time
 import datetime
 import pytz
 import os
@@ -22,12 +23,12 @@ __author__ = 'Sara Geleskie Damiano'
 __contact__ = 'sdamiano@stroudcenter.org'
 
 # Set up initial parameters - these are rewritten when run from the command prompt.
-past_hours_to_append = None  # Sets number of hours in the past to append.  Use None for all time
-# append_start = None  # Sets start time for the append **in EST**, use None for all time
+past_hours_to_append = 1  # Sets number of hours in the past to append.  Use None for all time
+append_start = None  # Sets start time for the append **in EST**, use None for all time
 append_end = None  # Sets end time for the append **in EST**, use None for all time
-append_start = "2018-01-22 17:00:00"  # Sets start time for the append **in EST**, use None for all time
+# append_start = "2018-01-22 17:00:00"  # Sets start time for the append **in EST**, use None for all time
 # append_end = "2017-05-01 00:00:00"  # Sets end time for the append **in EST**, use None for all time
-table = None  # Selects a single table to append from, often a logger number, use None for all loggers
+table = "SL035"  # Selects a single table to append from, often a logger number, use None for all loggers
 column = None  # Selects a single column to append from, often a variable code, use None for all columns
 
 
@@ -43,14 +44,18 @@ parser.add_argument('--table', action='store', default=None,
                     help='Selects a single table to append from, often a logger number')
 parser.add_argument('--col', action='store', default=None,
                     help='Selects a single column to append from, often a variable code')
+parser.add_argument('--start', action='store', default=None,
+                    help='Sets the start time for the append')
+parser.add_argument('--end', action='store', default=None,
+                    help='Sets the start time for the append')
 
 # Read the command line options, if run from the command line
 if sys.stdin.isatty():
     debug = parser.parse_args().debug
     Log_to_file = parser.parse_args().nolog
     past_hours_to_append = parser.parse_args().hours
-    append_start = None
-    append_end = None
+    append_start = parser.parse_args().start
+    append_end = parser.parse_args().end
     table = parser.parse_args().table
     column = parser.parse_args().col
 else:
@@ -147,10 +152,14 @@ DIYSeries, DIYData = dh_utils.get_dreamhost_data(required_column='TimeSeriesGUID
 if Log_to_file:
     text_file.write("%s series found with corresponding time series on the EnviroDIY data portal \n \n"
                     % (len(DIYSeries.index)))
+DIYData.sort_values(by=['EnviroDIYToken', 'SamplingFeatureGUID', 'timestamp'], inplace=True)
 
 if len(DIYData.index) > 0:
+    DIYData['AppendSuccessful'] = 0
+    DIYData['AppendFailed'] = 1
+
     if Log_to_file:
-        text_file.write("Table, Timestamp, HTTPAppendResult  \n")
+        text_file.write("Site Code, Table, # Successful Appends, # Unsuccessful Appends  \n")
 
     for name, group in DIYData.groupby(['EnviroDIYToken', 'SamplingFeatureGUID', 'timestamp']):
         json_string = '{\r\n"sampling_feature": "'
@@ -165,22 +174,45 @@ if len(DIYData.index) > 0:
             json_string += str(row.data_value)
         json_string += '\r\n}'
 
-        response = requests.post(url='http://data.envirodiy.org/api/data-stream/',
-                                 headers={"TOKEN": group.iloc[0].EnviroDIYToken, 'Content-Type': 'application/json'},
-                                 data=json_string)
+        response = ''
+        while response == '':
+            try:
+                response = requests.post(url='http://data.envirodiy.org/api/data-stream/',
+                                         headers={"TOKEN": group.iloc[0].EnviroDIYToken, 'Content-Type': 'application/json'},
+                                         data=json_string)
+            except:
+                if debug:
+                    print "Waiting to retry..."
+                time.sleep(5)
+                continue
+
+
+        for idx, row in group.iterrows():
+            if response.status_code <= 205:
+                DIYData.loc[idx, ['AppendSuccessful']] = 1
+                DIYData.loc[idx, ['AppendFailed']] = 0
+
         if debug:
             print group.iloc[0].TableName, "-", group.iloc[0].timestamp.isoformat(), "-", response.status_code
             # print "    ", response.request.method, response.request.path_url
             # print "    ", response.request.headers
             # print "    ", response.request.body
-            # print response.request.body
             # print "    ", "Response status code: %s" % response.status_code
             if response.status_code > 205:
                 print "    ", response.text
 
-        if Log_to_file:
-            text_file.write("%s, %s, %s  \n" %
-                            (group.iloc[0].TableName, group.iloc[0].timestamp, response.status_code))
+    DIYData["NumberSuccessfulAppends"] = \
+        DIYData.groupby(['EnviroDIYToken', 'SamplingFeatureGUID']
+                        )['AppendSuccessful'].transform('sum')
+    DIYData["NumberFailedAppends"] = \
+        DIYData.groupby(['EnviroDIYToken', 'SamplingFeatureGUID']
+                        )['AppendFailed'].transform('sum')
+
+    if Log_to_file:
+        for name, group in DIYData.groupby(['EnviroDIYToken', 'SamplingFeatureGUID']):
+            text_file.write("%s, %s, %s, %s  \n" %
+                            (group.iloc[0].SiteCode, group.iloc[0].TableName,
+                             group.iloc[0].NumberSuccessfulAppends, group.iloc[0].NumberFailedAppends))
 
 # Close out the text file
 end_log(text_file, start_datetime_utc)

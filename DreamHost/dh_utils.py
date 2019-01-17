@@ -14,7 +14,7 @@ import pytz
 import numpy as np
 
 # Bring in all of the database connection information.
-from dh_dbinfo import dbhost, dbname, dbuser, dbpswd
+from dh_dbinfo import dh_dbhost, dh_dbname, dh_dbname_cib, dh_dbuser, dh_dbpswd
 
 __author__ = 'Sara Geleskie Damiano'
 __contact__ = 'sdamiano@stroudcenter.org'
@@ -68,16 +68,22 @@ def get_dreamhost_data(required_column=None, query_start=None, query_end=None,
 
     # Set up an min and max time for when those values are not given
     if query_start is None:
+        str1 = ""
         query_start = datetime.datetime(2000, 1, 1, 0, 0, 0, tzinfo=pytz.timezone('Etc/GMT+5'))
+    else:
+        str1 = " AND ( DateTimeSeriesStart is NULL OR " \
+            + "DateTimeSeriesStart <= '" + str(query_start.strftime("%Y-%m-%d %H:%M:%S")) + "' )" \
+            + " AND ( DateTimeSeriesEnd is NULL OR " \
+            + "DateTimeSeriesEnd >= '" + str(query_start.strftime("%Y-%m-%d %H:%M:%S")) + "' )"
+
     if query_end is None:
         query_end = datetime.datetime.now(pytz.timezone('Etc/GMT+5')) + datetime.timedelta(days=1)
-
-    str1 = " AND (DateTimeSeriesStart is NULL OR DateTimeSeriesStart < '" \
-        + str(query_start.strftime("%Y-%m-%d %H:%M:%S")) \
-        + "')"
-    str2 = " AND (DateTimeSeriesEnd is NULL OR DateTimeSeriesEnd > '" \
-        + str(query_end.strftime("%Y-%m-%d %H:%M:%S")) \
-        + "')"
+        str2 = ""
+    else:
+        str2 = " AND ( DateTimeSeriesStart is NULL OR " \
+            + "DateTimeSeriesStart <= '" + str(query_end.strftime("%Y-%m-%d %H:%M:%S")) + "' )" \
+            + " AND ( DateTimeSeriesEnd is NULL OR " \
+            + "DateTimeSeriesEnd >= '" + str(query_end.strftime("%Y-%m-%d %H:%M:%S")) + "' )"
     str3 = ""
     if data_table_name is not None:
         str3 = " AND TableName = '" + data_table_name + "' "
@@ -97,14 +103,14 @@ def get_dreamhost_data(required_column=None, query_start=None, query_end=None,
         print query_text
 
     # Set up connection to the DreamHost MySQL database
-    conn = pymysql.connect(host=dbhost, db=dbname, user=dbuser, passwd=dbpswd)
+    conn = pymysql.connect(host=dh_dbhost, db=dh_dbname, user=dh_dbuser, passwd=dh_dbpswd)
     cur = conn.cursor()
 
     # Create a pandas data frame from the query
     series_table = pd.read_sql(query_text, conn)
 
     site_query = \
-        "SELECT DISTINCT SiteID, AQLocationID, EnviroDIYToken, SamplingFeatureGUID" \
+        "SELECT DISTINCT SiteID, SiteCode, AQLocationID, EnviroDIYToken, SamplingFeatureGUID" \
         " FROM Sites_for_midStream" \
         " WHERE AQLocationID is not NULL OR EnviroDIYToken is not NULL"
     sites = pd.read_sql(site_query, conn)
@@ -183,6 +189,10 @@ def get_dreamhost_data(required_column=None, query_start=None, query_end=None,
     series_table = \
         series_table.drop(series_table[series_table.NumberDataValues == 0].index)
 
+    # Sort by date
+    series_table_with_data.sort_values(by=['TableName', 'TableColumnName', 'timestamp'], inplace=True)
+    series_table.sort_values(by=['TableName', 'TableColumnName', 'DateTimeSeriesStart'], inplace=True)
+
     return series_table, series_table_with_data
 
 
@@ -211,6 +221,10 @@ def get_data_from_dreamhost_table(table, column, start_dt=None, end_dt=None, deb
         dt_col = "mbutcdatetime"
         sql_start = start_dt.astimezone(pytz.utc).strftime("%Y-%m-%d %H:%M:%S")
         sql_end = end_dt.astimezone(pytz.utc).strftime("%Y-%m-%d %H:%M:%S")
+    elif table in ["SL157"]:  # This logger's timestamp is a year off..
+        dt_col = "Loggertime"
+        sql_start = convert_python_time_to_rtc(start_dt, start_tz) - 31536000
+        sql_end = convert_python_time_to_rtc(end_dt, end_tz) - 31536000
     else:
         dt_col = "Loggertime"
         sql_start = convert_python_time_to_rtc(start_dt, start_tz)
@@ -227,22 +241,29 @@ def get_data_from_dreamhost_table(table, column, start_dt=None, end_dt=None, deb
                  + " ;"
 
     if debug:
-        print "   Data selected using the query:"
+        print "Data selected using the query:"
         print "   " + query_text
     t1 = datetime.datetime.now()
 
     # Set up connection to the DreamHost MySQL database
-    conn = pymysql.connect(host=dbhost, db=dbname, user=dbuser, passwd=dbpswd)
+    if table in ["SL035", "SL036", "SL037"]:
+        conn = pymysql.connect(host=dh_dbhost, db=dh_dbname_cib, user=dh_dbuser, passwd=dh_dbpswd)
+    else:
+        conn = pymysql.connect(host=dh_dbhost, db=dh_dbname, user=dh_dbuser, passwd=dh_dbpswd)
 
-    values_table = pd.read_sql(query_text, conn)
-
-    # Close out the database connections
-    conn.close()  # close the database connection
+    try:
+        values_table = pd.read_sql(query_text, conn)
+    except pd.io.sql.DatabaseError, e:
+        if debug:
+            print "   ERROR: ", e
+        conn.close()  # close the database connection
+        return pd.DataFrame(columns=['timestamp', 'data_value'])
+    else:
+        conn.close()  # close the database connection
 
     if debug:
-        print "   which returns %s values" % (len(values_table))
         t2 = datetime.datetime.now()
-        print "   SQL execution took %s" % (t2 - t1)
+        print "   which returns %s values in %s" % (len(values_table), (t2 - t1))
 
     # Create a new column with a proper uniform python datetime data type
     # remove old datetime column
@@ -251,12 +272,17 @@ def get_data_from_dreamhost_table(table, column, start_dt=None, end_dt=None, deb
             values_table['timestamp'] = \
                 values_table.apply(lambda row1: pytz.utc.localize(row1.mbutcdatetime).astimezone(start_tz), axis=1)
             values_table.drop(dt_col, axis=1, inplace=True)
+        elif table in ["SL157"]:  # This logger's timestamp is a year off..
+            # Need to convert arduino logger time into unix time (add 946684800)
+            values_table['timestamp'] = np.vectorize(convert_rtc_time_to_python)(values_table[dt_col], start_tz)
+            values_table['timestamp'] = values_table['timestamp'].add(pd.Timedelta(days=365))
+            values_table.drop(dt_col, axis=1, inplace=True)
         else:
             # Need to convert arduino logger time into unix time (add 946684800)
             values_table['timestamp'] = np.vectorize(convert_rtc_time_to_python)(values_table[dt_col], start_tz)
             values_table.drop(dt_col, axis=1, inplace=True)
 
-        if debug:
-            print "The first and last rows from DreamHost:\r\n", values_table.head(2), "\r\n", values_table.tail(2)
+        # if debug:
+        #     print "The first and last rows from DreamHost:\r\n", values_table.head(2), "\r\n", values_table.tail(2)
 
     return values_table
