@@ -2,6 +2,6 @@
 */.idea/*
 *.bak
 */AppendLogs/*
-dbinfo.py
-*/dbinfo.py
+*dbinfo.py
+*/*dbinfo.py
 *.pyc
