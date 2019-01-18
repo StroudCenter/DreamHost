@@ -130,7 +130,7 @@ def get_dreamhost_data(required_column=None, query_start=None, query_end=None,
     # From Wikipedia:  In order to conform with the POSIX style, those zone names beginning with "Etc/GMT" have their
     # sign reversed from the standard ISO 8601 convention. In the "Etc" area, zones west of GMT have a positive sign
     # and those east have a negative sign in their name (e.g "Etc/GMT-14" is 14 hours ahead of GMT.)
-    series_table['utc_offset_string2'] = series_table['utc_offset_string'].str.replace("+-", "-", regex=False)
+    series_table['utc_offset_string'] = series_table['utc_offset_string'].str.replace("+-", "-", regex=False)
 
     # Fix the types of the date/time columns
     series_table['DateTimeSeriesStart'] = pd.to_datetime(series_table['DateTimeSeriesStart'])
