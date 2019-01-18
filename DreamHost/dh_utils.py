@@ -125,8 +125,12 @@ def get_dreamhost_data(required_column=None, query_start=None, query_end=None,
     series_table['SeriesTimeZone'].fillna(value=-5, inplace=True)
 
     # create a series/column with the string timezone name
-    series_table['utc_offset_string'] = 'Etc/GMT+' + (-1*series_table['SeriesTimeZone']).apply(str).str.strip('.0')
-    series_table['utc_offset_string'].str.replace('Etc/GMT+-', 'Etc/GMT-')
+    series_table['utc_offset_string'] = 'Etc/GMT+' + (-1 * series_table['SeriesTimeZone']).map('{:.0f}'.format)
+    # NOTE:  In the Olson TZ Database used by pytz "Etc/GMT+5" is the name of the timezone at UTC-5.
+    # From Wikipedia:  In order to conform with the POSIX style, those zone names beginning with "Etc/GMT" have their
+    # sign reversed from the standard ISO 8601 convention. In the "Etc" area, zones west of GMT have a positive sign
+    # and those east have a negative sign in their name (e.g "Etc/GMT-14" is 14 hours ahead of GMT.)
+    series_table['utc_offset_string2'] = series_table['utc_offset_string'].str.replace("+-", "-", regex=False)
 
     # Fix the types of the date/time columns
     series_table['DateTimeSeriesStart'] = pd.to_datetime(series_table['DateTimeSeriesStart'])

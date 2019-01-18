@@ -26,9 +26,9 @@ __contact__ = 'sdamiano@stroudcenter.org'
 past_hours_to_append = 1  # Sets number of hours in the past to append.  Use None for all time
 append_start = None  # Sets start time for the append **in EST**, use None for all time
 append_end = None  # Sets end time for the append **in EST**, use None for all time
-# append_start = "2018-01-22 17:00:00"  # Sets start time for the append **in EST**, use None for all time
-# append_end = "2017-05-01 00:00:00"  # Sets end time for the append **in EST**, use None for all time
-table = "SL035"  # Selects a single table to append from, often a logger number, use None for all loggers
+# append_start = "2019-01-18 17:00:00"  # Sets start time for the append **in EST**, use None for all time
+# append_end = "2019-01-18 00:00:00"  # Sets end time for the append **in EST**, use None for all time
+table = None  # Selects a single table to append from, often a logger number, use None for all loggers
 column = None  # Selects a single column to append from, often a variable code, use None for all columns
 
 
@@ -65,6 +65,10 @@ else:
 # Deal with timezones...
 eastern_standard_time = pytz.timezone('Etc/GMT+5')
 eastern_local_time = pytz.timezone('US/Eastern')
+
+# Find the date/time the script was started:
+# start_datetime_utc = datetime.datetime.now(pytz.utc)
+# start_datetime_loc = start_datetime_utc.astimezone(eastern_local_time)
 
 
 def start_log():
@@ -152,6 +156,7 @@ DIYSeries, DIYData = dh_utils.get_dreamhost_data(required_column='TimeSeriesGUID
 if Log_to_file:
     text_file.write("%s series found with corresponding time series on the EnviroDIY data portal \n \n"
                     % (len(DIYSeries.index)))
+
 DIYData.sort_values(by=['EnviroDIYToken', 'SamplingFeatureGUID', 'timestamp'], inplace=True)
 
 if len(DIYData.index) > 0:
