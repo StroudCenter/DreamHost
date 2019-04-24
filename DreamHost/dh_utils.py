@@ -310,7 +310,7 @@ def get_data_from_dreamhost_table(table, column, start_dt=None, end_dt=None, deb
             values_table['server_timestamp'] = values_table[dt_server_col].dt.tz_localize(tz="Etc/GMT+5")
 
         # Print out warnings for likely incorrect timestamps
-        values_table['server_offset_uncorr'] = values_table['server_timestamp'] - values_table['timestamp']
+        values_table['server_offset_uncorr'] = values_table['server_timestamp'].dt.tz_convert(tz="Etc/GMT+5") - values_table['timestamp'].dt.tz_convert(tz="Etc/GMT+5")
         max_time_diff = abs(values_table['server_offset_uncorr'].max())
         if max_time_diff > datetime.timedelta(minutes=4):
             if debug:
@@ -332,7 +332,7 @@ def get_data_from_dreamhost_table(table, column, start_dt=None, end_dt=None, deb
         values_table['timestamp_c'] = values_table['timestamp_c'].dt.tz_localize('Etc/UTC').dt.tz_convert(tz="Etc/GMT+5")
 
         # Print out warnings for likely incorrect timestamps
-        values_table['server_offset'] = values_table['server_timestamp'] - values_table['timestamp_c']
+        values_table['server_offset'] = values_table['server_timestamp'].dt.tz_convert(tz="Etc/GMT+5") - values_table['timestamp_c'].dt.tz_convert(tz="Etc/GMT+5")
         max_time_diff_corr = abs(values_table['server_offset'].max())
         if (max_time_diff > datetime.timedelta(minutes=4)) & (max_time_diff_corr < datetime.timedelta(minutes=4)):
             if debug:
