@@ -142,7 +142,7 @@ def get_dreamhost_series_table(required_column="SeriesID", query_start=None, que
     # Set up an min and max time for when those values are not given
     if query_start is None:
         str1 = ""
-        query_start = datetime.datetime(2001, 1, 1, 0, 0, 0, tzinfo=pytz.timezone('Etc/GMT+5'))
+        query_start = datetime.datetime(2000, 1, 1, 0, 0, 0, tzinfo=pytz.timezone('Etc/GMT+5'))
     else:
         str1 =\
             " AND ( DateTimeSeriesEnd is NULL OR " + \
@@ -267,7 +267,9 @@ def get_data_from_dreamhost_table(table, column, start_dt=None, end_dt=None, deb
             sql_start = convert_python_time_to_rtc(start_dt, start_tz) - 31536000
             sql_end = convert_python_time_to_rtc(end_dt, end_tz) - 31536000
         if table == "SL111":  # A year off only for portions
-            if start_dt > datetime.datetime(2018, 2, 9, 12, 9, 0, tzinfo=pytz.timezone('Etc/GMT+5')):
+            if start_dt == datetime.datetime(2017, 6, 1, 0, 0, 0, tzinfo=pytz.timezone('Etc/GMT+5')):  # unset clock...
+                sql_start = 0
+            elif start_dt > datetime.datetime(2018, 2, 9, 12, 9, 0, tzinfo=pytz.timezone('Etc/GMT+5')):
                 sql_start = convert_python_time_to_rtc(start_dt, start_tz) - 31536000
             else:
                 sql_start = convert_python_time_to_rtc(start_dt, start_tz)
@@ -327,14 +329,15 @@ def get_data_from_dreamhost_table(table, column, start_dt=None, end_dt=None, deb
 
     # Create a new column with a proper uniform python datetime data type
     # remove old datetime column
+    # values_table = pd.read_sql(query_text, conn)
     if values_table[dt_col].count() > 0:
         if table in ["davis", "CRDavis"]:
-            values_table['timestamp'] = \
+            values_table['timestamp_raw'] = \
                 values_table.apply(lambda row1: pytz.utc.localize(row1.mbutcdatetime).astimezone(start_tz), axis=1)
             values_table['server_timestamp'] = values_table[dt_server_col].dt.tz_localize(tz="US/Pacific")
         else:
             # Need to convert arduino logger time into unix time (add 946684800)
-            values_table['timestamp'] = np.vectorize(convert_rtc_time_to_python)(values_table[dt_col], start_tz)
+            values_table['timestamp_raw'] = np.vectorize(convert_rtc_time_to_python)(values_table[dt_col], start_tz)
             values_table['server_timestamp'] = values_table[dt_server_col].dt.tz_localize(tz="Etc/GMT+5")
 
         # Fix timestamps from badly programmed loggers
@@ -349,7 +352,7 @@ def get_data_from_dreamhost_table(table, column, start_dt=None, end_dt=None, deb
 
         # estimate what we should be correcting by
         values_table['server_offset'] = (values_table['server_timestamp'].dt.tz_convert(tz="Etc/GMT+5") -
-                                         values_table['timestamp'].dt.tz_convert(tz="Etc/GMT+5"))
+                                         values_table['timestamp_raw'].dt.tz_convert(tz="Etc/GMT+5"))
         values_table['server_offset_round'] = values_table['server_offset'].dt.floor(freq='5min')
 
         # don't correct if the needed correction would be less than 5 minutes
@@ -357,14 +360,14 @@ def get_data_from_dreamhost_table(table, column, start_dt=None, end_dt=None, deb
         values_table['time_correction'] = values_table['server_offset_round'].where(values_table['mask'])
         values_table['time_correction'].fillna(pd.Timedelta(seconds=0), inplace=True)
 
-        values_table['timestamp_c'] = values_table['timestamp'] + values_table['time_correction']
-
-        values_table['timestamp'] = values_table['timestamp_c']
+        values_table['timestamp'] = values_table['timestamp_raw'] + values_table['time_correction']
+        values_table.sort_values(by=['timestamp'], inplace=True)
+        values_table = values_table.reset_index(drop=True)
 
         values_table.drop(dt_col, axis=1, inplace=True)
         values_table.drop(dt_server_col, axis=1, inplace=True)
         values_table.drop('server_timestamp', axis=1, inplace=True)
-        values_table.drop('timestamp_c', axis=1, inplace=True)
+        values_table.drop('timestamp_raw', axis=1, inplace=True)
         values_table.drop('server_offset_round', axis=1, inplace=True)
         values_table.drop('mask', axis=1, inplace=True)
 
@@ -384,7 +387,7 @@ def get_min_max_from_dreamhost_table(table, column, min=True, debug=True):
     """
 
     # Set up a sanity check min/max
-    start_dt = datetime.datetime(2001, 1, 1, 0, 0, 0, tzinfo=pytz.timezone('Etc/GMT+5'))
+    start_dt = datetime.datetime(2000, 1, 1, 0, 0, 0, tzinfo=pytz.timezone('Etc/GMT+5'))
     end_dt = datetime.datetime.now(pytz.timezone('Etc/GMT+5')) + datetime.timedelta(days=1)
 
     start_tz = start_dt.tzinfo
