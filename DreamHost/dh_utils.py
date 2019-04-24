@@ -329,7 +329,7 @@ def get_data_from_dreamhost_table(table, column, start_dt=None, end_dt=None, deb
         values_table['server_offset_round'] = values_table['server_offset'].dt.floor(freq='5min')
 
         # don't correct if the needed correction would be less than 5 minutes
-        values_table['mask'] = values_table['server_offset'] > pd.Timedelta(minutes=5)
+        values_table['mask'] = abs(values_table['server_offset']) > pd.Timedelta(minutes=5)
         values_table['time_correction'] = values_table['server_offset_round'].where(values_table['mask'])
         values_table['time_correction'].fillna(pd.Timedelta(seconds=0), inplace=True)
 

@@ -164,7 +164,7 @@ if len(DIYData.index) > 0:
     DIYData['AppendFailed'] = 1
 
     if Log_to_file:
-        text_file.write("Site Code, Table, # Successful Appends, # Unsuccessful Appends, Max Offset between Server and Logger  \n")
+        text_file.write("Site Code, Table, # Successful Appends, # Unsuccessful Appends, Max Offset between Server and Logger, Max Timestamp Correction  \n")
 
     for name, group in DIYData.groupby(['EnviroDIYToken', 'SamplingFeatureGUID', 'timestamp']):
         json_string = '{\r\n"sampling_feature": "'
@@ -215,10 +215,10 @@ if len(DIYData.index) > 0:
 
     if Log_to_file:
         for name, group in DIYData.groupby(['EnviroDIYToken', 'SamplingFeatureGUID']):
-            text_file.write("%s, %s, %s, %s, %s  \n" %
+            text_file.write("%s, %s, %s, %s, %s, %s  \n" %
                             (group.iloc[0].SiteCode, group.iloc[0].TableName,
                              group.iloc[0].NumberSuccessfulAppends, group.iloc[0].NumberFailedAppends,
-                             group.server_offset.max()))
+                             group.server_offset.max(), group.time_correction.max()))
 
 # Close out the text file
 end_log(text_file, start_datetime_utc)
