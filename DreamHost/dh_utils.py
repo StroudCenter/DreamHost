@@ -118,6 +118,10 @@ def get_dreamhost_data(required_column="SeriesID", query_start=None, query_end=N
     series_table_with_data.sort_values(by=['TableName', 'TableColumnName', 'timestamp'], inplace=True)
     series_table.sort_values(by=['TableName', 'TableColumnName', 'DateTimeSeriesStart'], inplace=True)
 
+    # Reset indices after sorting
+    series_table_with_data = series_table_with_data.reset_index(drop=True)
+    series_table = series_table.reset_index(drop=True)
+
     return series_table, series_table_with_data
 
 
@@ -243,7 +247,7 @@ def get_data_from_dreamhost_table(table, column, start_dt=None, end_dt=None, deb
 
     # Set up an min and max time for when those values are not given
     if start_dt is None:
-        start_dt = datetime.datetime(2001, 1, 1, 0, 0, 0, tzinfo=pytz.timezone('Etc/GMT+5'))
+        start_dt = datetime.datetime(2000, 1, 1, 0, 0, 0, tzinfo=pytz.timezone('Etc/GMT+5'))
     if end_dt is None:
         end_dt = datetime.datetime.now(pytz.timezone('Etc/GMT+5')) + datetime.timedelta(days=1)
 
@@ -259,8 +263,27 @@ def get_data_from_dreamhost_table(table, column, start_dt=None, end_dt=None, deb
     elif table in ["SL157", "SL111", "SL112"]:  # This logger's timestamp is a year off..
         dt_col = "Loggertime"
         dt_server_col = "Date"
-        sql_start = convert_python_time_to_rtc(start_dt, start_tz) - 31536000
-        sql_end = convert_python_time_to_rtc(end_dt, end_tz) - 31536000
+        if table == "SL157":  # A year off throughout
+            sql_start = convert_python_time_to_rtc(start_dt, start_tz) - 31536000
+            sql_end = convert_python_time_to_rtc(end_dt, end_tz) - 31536000
+        if table == "SL111":  # A year off only for portions
+            if start_dt > datetime.datetime(2018, 2, 9, 12, 9, 0, tzinfo=pytz.timezone('Etc/GMT+5')):
+                sql_start = convert_python_time_to_rtc(start_dt, start_tz) - 31536000
+            else:
+                sql_start = convert_python_time_to_rtc(start_dt, start_tz)
+            if end_dt > datetime.datetime(2018, 2, 9, 12, 9, 0, tzinfo=pytz.timezone('Etc/GMT+5')):
+                sql_end = convert_python_time_to_rtc(end_dt, end_tz) - 31536000
+            else:
+                sql_end = convert_python_time_to_rtc(end_dt, end_tz)
+        if table == "SL112":  # A year off only for portions
+            if start_dt > datetime.datetime(2018, 4, 19, 14, 59, 0, tzinfo=pytz.timezone('Etc/GMT+5')):
+                sql_start = convert_python_time_to_rtc(start_dt, start_tz) - 31536000
+            else:
+                sql_start = convert_python_time_to_rtc(start_dt, start_tz)
+            if end_dt > datetime.datetime(2018, 4, 19, 14, 59, 0, tzinfo=pytz.timezone('Etc/GMT+5')):
+                sql_end = convert_python_time_to_rtc(end_dt, end_tz) - 31536000
+            else:
+                sql_end = convert_python_time_to_rtc(end_dt, end_tz)
     else:
         dt_col = "Loggertime"
         dt_server_col = "Date"
@@ -372,10 +395,6 @@ def get_min_max_from_dreamhost_table(table, column, min=True, debug=True):
         dt_col = "mbutcdatetime"
         sql_start = start_dt.astimezone(pytz.utc).strftime("%Y-%m-%d %H:%M:%S")
         sql_end = end_dt.astimezone(pytz.utc).strftime("%Y-%m-%d %H:%M:%S")
-    elif table in ["SL157", "SL111", "SL112"]:  # This logger's timestamp is a year off..
-        dt_col = "Loggertime"
-        sql_start = convert_python_time_to_rtc(start_dt, start_tz) - 31536000
-        sql_end = convert_python_time_to_rtc(end_dt, end_tz) - 31536000
     else:
         dt_col = "Loggertime"
         sql_start = convert_python_time_to_rtc(start_dt, start_tz)
