@@ -100,6 +100,11 @@ def get_dreamhost_data(required_column="SeriesID", query_start=None, query_end=N
                 series_table_with_data.drop('server_offset_x', axis=1, inplace=True)
                 series_table_with_data.drop('server_offset_y', axis=1, inplace=True)
 
+                series_table_with_data['time_correction'] = \
+                    series_table_with_data['time_correction_x'].fillna(series_table_with_data['time_correction_y'])
+                series_table_with_data.drop('time_correction_x', axis=1, inplace=True)
+                series_table_with_data.drop('time_correction_y', axis=1, inplace=True)
+
     # Check number of values returned
     series_table_with_data["NumberDataValues"] = \
         series_table_with_data.groupby(["SeriesID"])['data_value'].transform('count')
@@ -309,37 +314,26 @@ def get_data_from_dreamhost_table(table, column, start_dt=None, end_dt=None, deb
             values_table['timestamp'] = np.vectorize(convert_rtc_time_to_python)(values_table[dt_col], start_tz)
             values_table['server_timestamp'] = values_table[dt_server_col].dt.tz_localize(tz="Etc/GMT+5")
 
-        # Print out warnings for likely incorrect timestamps
-        values_table['server_offset_uncorr'] = values_table['server_timestamp'].dt.tz_convert(tz="Etc/GMT+5") - values_table['timestamp'].dt.tz_convert(tz="Etc/GMT+5")
-        max_time_diff = abs(values_table['server_offset_uncorr'].max())
-        if max_time_diff > datetime.timedelta(minutes=4):
-            if debug:
-                print "TIMESTAMPS DIFFER FROM SERVER TIMESTAMPS BY UP TO", max_time_diff
-
         # Fix timestamps from badly programmed loggers
-        if table in ["SL157"]:
-            bad_program_dt = datetime.datetime(2000, 1, 1, 0, 0, 0, tzinfo=pytz.timezone('Etc/GMT+5'))
-        elif table in ["SL111"]:
-            bad_program_dt = datetime.datetime(2018, 2, 9, 12, 10, 0, tzinfo=pytz.timezone('Etc/GMT+5'))
-        elif table in ["SL112"]:  # This logger's timestamp is a year off..
-            bad_program_dt = datetime.datetime(2018, 4, 19, 15, 0, 0, tzinfo=pytz.timezone('Etc/GMT+5'))
-        else:
-            bad_program_dt = end_dt
+        # if table in ["SL157"]:
+        #     bad_program_dt = datetime.datetime(2000, 1, 1, 0, 0, 0, tzinfo=pytz.timezone('Etc/GMT+5'))
+        # elif table in ["SL111"]:
+        #     bad_program_dt = datetime.datetime(2018, 2, 9, 12, 10, 0, tzinfo=pytz.timezone('Etc/GMT+5'))
+        # elif table in ["SL112"]:  # This logger's timestamp is a year off..
+        #     bad_program_dt = datetime.datetime(2018, 4, 19, 15, 0, 0, tzinfo=pytz.timezone('Etc/GMT+5'))
+        # else:
+        #     bad_program_dt = end_dt
 
-        values_table['timestamp_c'] = np.where(values_table['server_timestamp'] > bad_program_dt,
-                                               values_table['timestamp'].add(pd.Timedelta(days=365)),
-                                               values_table['timestamp'])
-        values_table['timestamp_c'] = values_table['timestamp_c'].dt.tz_localize('Etc/UTC').dt.tz_convert(tz="Etc/GMT+5")
+        # estimate what we should be correcting by
+        values_table['server_offset'] = (values_table['server_timestamp'] - values_table['timestamp'])
+        values_table['server_offset_round'] = values_table['server_offset'].dt.floor(freq='5min')
 
-        # Print out warnings for likely incorrect timestamps
-        values_table['server_offset'] = values_table['server_timestamp'].dt.tz_convert(tz="Etc/GMT+5") - values_table['timestamp_c'].dt.tz_convert(tz="Etc/GMT+5")
-        max_time_diff_corr = abs(values_table['server_offset'].max())
-        if (max_time_diff > datetime.timedelta(minutes=4)) & (max_time_diff_corr < datetime.timedelta(minutes=4)):
-            if debug:
-                print "Corrected timestamps line up with server times."
-        elif max_time_diff_corr > datetime.timedelta(minutes=4):
-            if debug:
-                print "EVEN AFTER CORRECTION, TIMESTAMPS DIFFER FROM SERVER TIMESTAMPS BY UP TO", max_time_diff
+        # don't correct if the needed correction would be less than 5 minutes
+        values_table['mask'] = values_table['server_offset'] > pd.Timedelta(minutes=5)
+        values_table['time_correction'] = values_table['server_offset_round'].where(values_table['mask'])
+        values_table['time_correction'].fillna(pd.Timedelta(seconds=0), inplace=True)
+
+        values_table['timestamp_c'] = values_table['timestamp'] + values_table['time_correction']
 
         values_table['timestamp'] = values_table['timestamp_c']
 
@@ -347,8 +341,8 @@ def get_data_from_dreamhost_table(table, column, start_dt=None, end_dt=None, deb
         values_table.drop(dt_server_col, axis=1, inplace=True)
         values_table.drop('server_timestamp', axis=1, inplace=True)
         values_table.drop('timestamp_c', axis=1, inplace=True)
-        values_table.drop('server_offset_uncorr', axis=1, inplace=True)
-        # values_table.drop('server_offset', axis=1, inplace=True)
+        values_table.drop('server_offset_round', axis=1, inplace=True)
+        values_table.drop('mask', axis=1, inplace=True)
 
         # if debug:
         #     print "The first and last rows from DreamHost:\r\n", values_table.head(2), "\r\n", values_table.tail(2)
