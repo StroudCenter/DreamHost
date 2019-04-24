@@ -24,11 +24,11 @@ __author__ = 'Sara Geleskie Damiano'
 __contact__ = 'sdamiano@stroudcenter.org'
 
 # Set up initial parameters - these are rewritten when run from the command prompt.
-past_hours_to_append = 1  # Sets number of hours in the past to append.  Use None for all time
-append_start = None  # Sets start time for the append **in EST**, use None for all time
-append_end = None  # Sets end time for the append **in EST**, use None for all time
-# append_start = "2017-04-01 00:00:00"  # Sets start time for the append **in EST**, use None for all time
-# append_end = "2017-05-01 00:00:00"  # Sets end time for the append **in EST**, use None for all time
+past_hours_to_append = None  # Sets number of hours in the past to append.  Use None for all time
+# append_start = None  # Sets start time for the append **in EST**, use None for all time
+# append_end = None  # Sets end time for the append **in EST**, use None for all time
+append_start = "2019-01-08 16:00:00"  # Sets start time for the append **in EST**, use None for all time
+append_end = "2019-01-18 18:00:00"  # Sets end time for the append **in EST**, use None for all time
 table = None  # Selects a single table to append from, often a logger number, use None for all loggers
 column = None  # Selects a single column to append from, often a variable code, use None for all columns
 
