@@ -326,7 +326,7 @@ def get_data_from_dreamhost_table(table, column, start_dt=None, end_dt=None, deb
 
         # estimate what we should be correcting by
         values_table['server_offset'] = (values_table['server_timestamp'].dt.tz_convert(tz="Etc/GMT+5") -
-                                         values_table['timestamp']).dt.tz_convert(tz="Etc/GMT+5")
+                                         values_table['timestamp'].dt.tz_convert(tz="Etc/GMT+5"))
         values_table['server_offset_round'] = values_table['server_offset'].dt.floor(freq='5min')
 
         # don't correct if the needed correction would be less than 5 minutes
