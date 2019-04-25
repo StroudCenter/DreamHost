@@ -68,7 +68,7 @@ def get_dreamhost_data(required_column="SeriesID", query_start=None, query_end=N
 
     # Get the actual data for each series
     series_table = get_dreamhost_series_table(required_column=required_column,
-                                              query_start=query_start, query_end=query_end,
+                                              series_query_start=query_start, series_query_end=query_end,
                                               data_table_name=data_table_name, data_column_name=data_column_name,
                                               debug=debug)
 
@@ -77,7 +77,8 @@ def get_dreamhost_data(required_column="SeriesID", query_start=None, query_end=N
 
     for (idx, row) in series_table.iterrows():
         data_dt = get_data_from_dreamhost_table(table=row.TableName, column=row.TableColumnName,
-                                                start_dt=row.DateTimeQueryStart, end_dt=row.DateTimeQueryEnd,
+                                                data_query_start=row.DateTimeQueryStart,
+                                                data_query_end=row.DateTimeQueryEnd,
                                                 debug=debug)
         series_table.loc[idx, 'NumberDataValues'] = len(data_dt.index)
         if len(data_dt.index) > 0:
@@ -125,14 +126,14 @@ def get_dreamhost_data(required_column="SeriesID", query_start=None, query_end=N
     return series_table, series_table_with_data
 
 
-def get_dreamhost_series_table(required_column="SeriesID", query_start=None, query_end=None,
+def get_dreamhost_series_table(required_column="SeriesID", series_query_start=None, series_query_end=None,
                               data_table_name=None, data_column_name=None, debug=False):
     """
     Gets a list of all the series to append data to
     :arguments:
     required_column = A string column name which must not be blank in the query
-    query_start = A datetime string which data must be newer than, defaults to none.
-    query_end = A datetime string which data must be older than, defaults to none.
+    series_query_start = A datetime string which data must be newer than, defaults to none.
+    series_query_end = A datetime string which data must be older than, defaults to none.
     dataTableName = A string table name, if data from only one is desired.
     dataColumnName = A string column name, if data from only one is desired
     :return:
@@ -140,27 +141,28 @@ def get_dreamhost_series_table(required_column="SeriesID", query_start=None, que
     """
 
     # Set up an min and max time for when those values are not given
-    if query_start is None:
+    if series_query_start is None:
         str1 = ""
-        query_start = datetime.datetime(2000, 1, 1, 0, 0, 0, tzinfo=pytz.timezone('Etc/GMT+5'))
+        series_query_start = datetime.datetime(2000, 1, 1, 0, 0, 0, tzinfo=pytz.timezone('Etc/GMT+5'))
     else:
         str1 =\
             " AND ( DateTimeSeriesEnd is NULL OR " + \
-            "DateTimeSeriesEnd >= '" + str(query_start.strftime("%Y-%m-%d %H:%M:%S")) + "' )"
+            "DateTimeSeriesEnd >= '" + str(series_query_start.strftime("%Y-%m-%d %H:%M:%S")) + "' )"
             # + \
             # " AND ( DateTimeSeriesStart is NULL OR " + \
-            # "DateTimeSeriesStart >= '" + str(query_start.strftime("%Y-%m-%d %H:%M:%S")) + "' )"
+            # "DateTimeSeriesStart >= '" + str(series_query_start.strftime("%Y-%m-%d %H:%M:%S")) + "' )"
 
-    if query_end is None:
-        query_end = datetime.datetime.now(pytz.timezone('Etc/GMT+5')) + datetime.timedelta(days=1)
+    if series_query_end is None:
+        series_query_end = datetime.datetime.now(pytz.timezone('Etc/GMT+5')) + datetime.timedelta(days=1)
         str2 = ""
     else:
         str2 =\
             " AND ( DateTimeSeriesStart is NULL OR " + \
-            "DateTimeSeriesStart <= '" + str(query_end.strftime("%Y-%m-%d %H:%M:%S")) + "' )"
+            "DateTimeSeriesStart <= '" + str(series_query_end.strftime("%Y-%m-%d %H:%M:%S")) + "' )"
             # + \
             # " AND ( DateTimeSeriesEnd is NULL OR " + \
-            # "DateTimeSeriesEnd >= '" + str(query_end.strftime("%Y-%m-%d %H:%M:%S")) + "' )"
+            # "DateTimeSeriesEnd >= '" + str(series_query_end.strftime("%Y-%m-%d %H:%M:%S")) + "' )"
+
     str3 = ""
     if data_table_name is not None:
         str3 = " AND TableName = '" + data_table_name + "' "
@@ -227,70 +229,70 @@ def get_dreamhost_series_table(required_column="SeriesID", query_start=None, que
 
     # Verify the actual date and time to pick from the dream host tables
     series_table['DateTimeQueryStart'] = series_table.apply(lambda row1:
-                                                            max(query_start, row1.DateTimeSeriesStart), axis=1)
+                                                            max(series_query_start, row1.DateTimeSeriesStart), axis=1)
     series_table['DateTimeQueryEnd'] = series_table.apply(lambda row1:
-                                                          min(query_end, row1.DateTimeSeriesEnd), axis=1)
+                                                          min(series_query_end, row1.DateTimeSeriesEnd), axis=1)
 
     return series_table
 
 
-def get_data_from_dreamhost_table(table, column, start_dt=None, end_dt=None, debug=False):
+def get_data_from_dreamhost_table(table, column, data_query_start=None, data_query_end=None, debug=False):
     """
     Returns a pandas data frame with the timestamp and data value from a given table and column.
     :param table: A string which is the same of the SQL table of interest
     :param column: A string which is the name of the column of interest
-    :param start_dt: The first date/time for data - All date times should be timezone AWARE
-    :param end_dt: The last date/time for data
+    :param data_query_start: The first date/time for data - All date times should be timezone AWARE
+    :param data_query_end: The last date/time for data
     :param debug: A boolean for whether extra print commands apply
     :return: A pandas data frame with the timestamp and data value from a given table and column.
     """
 
     # Set up an min and max time for when those values are not given
-    if start_dt is None:
-        start_dt = datetime.datetime(2000, 1, 1, 0, 0, 0, tzinfo=pytz.timezone('Etc/GMT+5'))
-    if end_dt is None:
-        end_dt = datetime.datetime.now(pytz.timezone('Etc/GMT+5')) + datetime.timedelta(days=1)
+    if data_query_start is None:
+        data_query_start = datetime.datetime(2000, 1, 1, 0, 0, 0, tzinfo=pytz.timezone('Etc/GMT+5'))
+    if data_query_end is None:
+        data_query_end = datetime.datetime.now(pytz.timezone('Etc/GMT+5')) + datetime.timedelta(days=1)
 
-    start_tz = start_dt.tzinfo
-    end_tz = end_dt.tzinfo
+    start_tz = data_query_start.tzinfo
+    end_tz = data_query_end.tzinfo
 
     if table in ["davis", "CRDavis"]:
         # The meteobridges streaming this data stream a column of time in UTC
         dt_col = "mbutcdatetime"
         dt_server_col = "servertime"
-        sql_start = start_dt.astimezone(pytz.utc).strftime("%Y-%m-%d %H:%M:%S")
-        sql_end = end_dt.astimezone(pytz.utc).strftime("%Y-%m-%d %H:%M:%S")
+        sql_start = data_query_start.astimezone(pytz.utc).strftime("%Y-%m-%d %H:%M:%S")
+        sql_end = data_query_end.astimezone(pytz.utc).strftime("%Y-%m-%d %H:%M:%S")
     elif table in ["SL157", "SL111", "SL112"]:  # This logger's timestamp is a year off..
         dt_col = "Loggertime"
         dt_server_col = "Date"
         if table == "SL157":  # A year off throughout
-            sql_start = convert_python_time_to_rtc(start_dt, start_tz) - 31536000
-            sql_end = convert_python_time_to_rtc(end_dt, end_tz) - 31536000
+            sql_start = convert_python_time_to_rtc(data_query_start, start_tz) - 31536000
+            sql_end = convert_python_time_to_rtc(data_query_end, end_tz) - 31536000
         if table == "SL111":  # A year off only for portions
-            if start_dt == datetime.datetime(2017, 6, 1, 0, 0, 0, tzinfo=pytz.timezone('Etc/GMT+5')):  # unset clock...
+            if data_query_start == datetime.datetime(2017, 6, 1, 0, 0, 0, tzinfo=pytz.timezone('Etc/GMT+5')):  # unset clock...
                 sql_start = 0
-            elif start_dt > datetime.datetime(2018, 2, 9, 12, 9, 0, tzinfo=pytz.timezone('Etc/GMT+5')):
-                sql_start = convert_python_time_to_rtc(start_dt, start_tz) - 31536000
+            elif data_query_start > datetime.datetime(2018, 2, 9, 12, 9, 0, tzinfo=pytz.timezone('Etc/GMT+5')):
+                sql_start = convert_python_time_to_rtc(data_query_start, start_tz) - 31536000
             else:
-                sql_start = convert_python_time_to_rtc(start_dt, start_tz)
-            if end_dt > datetime.datetime(2018, 2, 9, 12, 9, 0, tzinfo=pytz.timezone('Etc/GMT+5')):
-                sql_end = convert_python_time_to_rtc(end_dt, end_tz) - 31536000
+                sql_start = convert_python_time_to_rtc(data_query_start, start_tz)
+            if data_query_end > datetime.datetime(2018, 2, 9, 12, 9, 0, tzinfo=pytz.timezone('Etc/GMT+5')):
+                sql_end = convert_python_time_to_rtc(data_query_end, end_tz) - 31536000
             else:
-                sql_end = convert_python_time_to_rtc(end_dt, end_tz)
+                sql_end = convert_python_time_to_rtc(data_query_end, end_tz)
         if table == "SL112":  # A year off only for portions
-            if start_dt > datetime.datetime(2018, 4, 19, 14, 59, 0, tzinfo=pytz.timezone('Etc/GMT+5')):
-                sql_start = convert_python_time_to_rtc(start_dt, start_tz) - 31536000
+            if data_query_start > datetime.datetime(2018, 4, 19, 14, 59, 0, tzinfo=pytz.timezone('Etc/GMT+5')):
+                sql_start = convert_python_time_to_rtc(data_query_start, start_tz) - 31536000
             else:
-                sql_start = convert_python_time_to_rtc(start_dt, start_tz)
-            if end_dt > datetime.datetime(2018, 4, 19, 14, 59, 0, tzinfo=pytz.timezone('Etc/GMT+5')):
-                sql_end = convert_python_time_to_rtc(end_dt, end_tz) - 31536000
+                sql_start = convert_python_time_to_rtc(data_query_start, start_tz)
+            if data_query_end > datetime.datetime(2018, 4, 19, 14, 59, 0, tzinfo=pytz.timezone('Etc/GMT+5')):
+                sql_end = convert_python_time_to_rtc(data_query_end, end_tz) - 31536000
             else:
-                sql_end = convert_python_time_to_rtc(end_dt, end_tz)
+                sql_end = convert_python_time_to_rtc(data_query_end, end_tz)
     else:
         dt_col = "Loggertime"
         dt_server_col = "Date"
-        sql_start = convert_python_time_to_rtc(start_dt, start_tz)
-        sql_end = convert_python_time_to_rtc(end_dt, end_tz)
+        sql_start = convert_python_time_to_rtc(data_query_start, start_tz)
+        sql_end = convert_python_time_to_rtc(data_query_end, end_tz)
 
     # Creating the query text here because the character masking works oddly
     # in the cur.execute function.
@@ -348,7 +350,7 @@ def get_data_from_dreamhost_table(table, column, start_dt=None, end_dt=None, deb
         # elif table in ["SL112"]:  # This logger's timestamp is a year off..
         #     bad_program_dt = datetime.datetime(2018, 4, 19, 15, 0, 0, tzinfo=pytz.timezone('Etc/GMT+5'))
         # else:
-        #     bad_program_dt = end_dt
+        #     bad_program_dt = data_query_end
 
         # estimate what we should be correcting by
         values_table['server_offset'] = (values_table['server_timestamp'].dt.tz_convert(tz="Etc/GMT+5") -
@@ -360,16 +362,22 @@ def get_data_from_dreamhost_table(table, column, start_dt=None, end_dt=None, deb
         values_table['time_correction'] = values_table['server_offset_round'].where(values_table['mask'])
         values_table['time_correction'].fillna(pd.Timedelta(seconds=0), inplace=True)
 
+        # Actually do the correction
         values_table['timestamp'] = values_table['timestamp_raw'] + values_table['time_correction']
         values_table.sort_values(by=['timestamp'], inplace=True)
         values_table = values_table.reset_index(drop=True)
 
+        # Drop extra columns
         values_table.drop(dt_col, axis=1, inplace=True)
         values_table.drop(dt_server_col, axis=1, inplace=True)
         values_table.drop('server_timestamp', axis=1, inplace=True)
         values_table.drop('timestamp_raw', axis=1, inplace=True)
         values_table.drop('server_offset_round', axis=1, inplace=True)
         values_table.drop('mask', axis=1, inplace=True)
+
+        # Drop values that came in that are out of the date range after correcting the timestamp
+        values_table.drop(values_table[values_table.timestamp < data_query_start].index, inplace=True)
+        values_table.drop(values_table[values_table.timestamp > data_query_end].index, inplace=True)
 
         # if debug:
         #     print "The first and last rows from DreamHost:\r\n", values_table.head(2), "\r\n", values_table.tail(2)
@@ -387,21 +395,21 @@ def get_min_max_from_dreamhost_table(table, column, min=True, debug=True):
     """
 
     # Set up a sanity check min/max
-    start_dt = datetime.datetime(2000, 1, 1, 0, 0, 0, tzinfo=pytz.timezone('Etc/GMT+5'))
-    end_dt = datetime.datetime.now(pytz.timezone('Etc/GMT+5')) + datetime.timedelta(days=1)
+    data_query_start = datetime.datetime(2000, 1, 1, 0, 0, 0, tzinfo=pytz.timezone('Etc/GMT+5'))
+    data_query_end = datetime.datetime.now(pytz.timezone('Etc/GMT+5')) + datetime.timedelta(days=1)
 
-    start_tz = start_dt.tzinfo
-    end_tz = end_dt.tzinfo
+    start_tz = data_query_start.tzinfo
+    end_tz = data_query_end.tzinfo
 
     if table in ["davis", "CRDavis"]:
         # The meteobridges streaming this data stream a column of time in UTC
         dt_col = "mbutcdatetime"
-        sql_start = start_dt.astimezone(pytz.utc).strftime("%Y-%m-%d %H:%M:%S")
-        sql_end = end_dt.astimezone(pytz.utc).strftime("%Y-%m-%d %H:%M:%S")
+        sql_start = data_query_start.astimezone(pytz.utc).strftime("%Y-%m-%d %H:%M:%S")
+        sql_end = data_query_end.astimezone(pytz.utc).strftime("%Y-%m-%d %H:%M:%S")
     else:
         dt_col = "Loggertime"
-        sql_start = convert_python_time_to_rtc(start_dt, start_tz)
-        sql_end = convert_python_time_to_rtc(end_dt, end_tz)
+        sql_start = convert_python_time_to_rtc(data_query_start, start_tz)
+        sql_end = convert_python_time_to_rtc(data_query_end, end_tz)
 
     if min:
         select_col = "MIN(" + dt_col + ") as " + dt_col
