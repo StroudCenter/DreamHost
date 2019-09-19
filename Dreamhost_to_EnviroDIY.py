@@ -150,9 +150,9 @@ if append_start is None and append_end is None and past_hours_to_append is not N
 
 
 # Get data for all series that are available
-    DIYSeries, DIYData = dh_utils.get_dreamhost_data(required_column='TimeSeriesGUID',
-                                                     query_start=append_start_dt, query_end=append_end_dt,
-                                                     data_table_name=table, data_column_name=column, debug=debug)
+DIYSeries, DIYData = dh_utils.get_dreamhost_data(required_column='TimeSeriesGUID',
+                                                 query_start=append_start_dt, query_end=append_end_dt,
+                                                 data_table_name=table, data_column_name=column, debug=debug)
 
 if Log_to_file:
     text_file.write("%s series found with corresponding time series on the EnviroDIY data portal \n \n"
