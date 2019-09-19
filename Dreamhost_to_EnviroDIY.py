@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+
 
 """
 Created on Wed Nov 05 13:58:15 2014
@@ -24,11 +24,12 @@ __contact__ = 'sdamiano@stroudcenter.org'
 
 # Set up initial parameters - these are rewritten when run from the command prompt.
 past_hours_to_append = None  # Sets number of hours in the past to append.  Use None for all time
+# append_start = "2019-09-16 00:00:00"  # Sets start time for the append **in EST**, use None for all time
 append_start = None  # Sets start time for the append **in EST**, use None for all time
+# append_end = "2019-04-18 12:00:00"  # Sets end time for the append **in EST**, use None for all time
 append_end = None  # Sets end time for the append **in EST**, use None for all time
-# append_start = "2019-01-08 16:00:00"  # Sets start time for the append **in EST**, use None for all time
-# append_end = "2019-01-18 18:00:00"  # Sets end time for the append **in EST**, use None for all time
-table = "SL112"  # Selects a single table to append from, often a logger number, use None for all loggers
+# table = "SL112"  # Selects a single table to append from, often a logger number, use None for all loggers
+table = None  # Selects a single table to append from, often a logger number, use None for all loggers
 column = None  # Selects a single column to append from, often a variable code, use None for all columns
 
 
@@ -149,15 +150,15 @@ if append_start is None and append_end is None and past_hours_to_append is not N
 
 
 # Get data for all series that are available
-DIYSeries, DIYData = dh_utils.get_dreamhost_data(required_column='TimeSeriesGUID',
-                                                 query_start=append_start_dt, query_end=append_end_dt,
-                                                 data_table_name=table, data_column_name=column, debug=debug)
+    DIYSeries, DIYData = dh_utils.get_dreamhost_data(required_column='TimeSeriesGUID',
+                                                     query_start=append_start_dt, query_end=append_end_dt,
+                                                     data_table_name=table, data_column_name=column, debug=debug)
 
 if Log_to_file:
     text_file.write("%s series found with corresponding time series on the EnviroDIY data portal \n \n"
                     % (len(DIYSeries.index)))
 
-DIYData.sort_values(by=['EnviroDIYToken', 'SamplingFeatureGUID', 'timestamp'], inplace=True)
+DIYData.sort_values(by=['TableName', 'EnviroDIYToken', 'SamplingFeatureGUID', 'timestamp'], inplace=True)
 
 if len(DIYData.index) > 0:
     DIYData['AppendSuccessful'] = 0

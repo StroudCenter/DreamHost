@@ -256,51 +256,63 @@ def get_data_from_dreamhost_table(table, column, data_query_start=None, data_que
     start_tz = data_query_start.tzinfo
     end_tz = data_query_end.tzinfo
 
+    # if table in ["davis", "CRDavis"]:
+    #     # The meteobridges streaming this data stream a column of time in UTC
+    #     dt_col = "mbutcdatetime"
+    #     dt_server_col = "servertime"
+    #     sql_start = data_query_start.astimezone(pytz.utc).strftime("%Y-%m-%d %H:%M:%S")
+    #     sql_end = data_query_end.astimezone(pytz.utc).strftime("%Y-%m-%d %H:%M:%S")
+    # elif table in ["SL157", "SL111", "SL112"]:  # This logger's timestamp is a year off..
+    #     dt_col = "Loggertime"
+    #     dt_server_col = "Date"
+    #     if table == "SL157":  # A year off throughout
+    #         sql_start = convert_python_time_to_rtc(data_query_start, start_tz) - 31536000
+    #         sql_end = convert_python_time_to_rtc(data_query_end, end_tz) - 31536000
+    #     if table == "SL111":  # A year off only for portions
+    #         if data_query_start == datetime.datetime(2017, 6, 1, 0, 0, 0, tzinfo=pytz.timezone('Etc/GMT+5')):  # unset clock...
+    #             sql_start = 0
+    #         elif data_query_start > datetime.datetime(2018, 2, 9, 12, 9, 0, tzinfo=pytz.timezone('Etc/GMT+5')):
+    #             sql_start = convert_python_time_to_rtc(data_query_start, start_tz) - 31536000
+    #         else:
+    #             sql_start = convert_python_time_to_rtc(data_query_start, start_tz)
+    #         if data_query_end > datetime.datetime(2018, 2, 9, 12, 9, 0, tzinfo=pytz.timezone('Etc/GMT+5')):
+    #             sql_end = convert_python_time_to_rtc(data_query_end, end_tz) - 31536000
+    #         else:
+    #             sql_end = convert_python_time_to_rtc(data_query_end, end_tz)
+    #     if table == "SL112":  # A year off only for portions
+    #         if data_query_start > datetime.datetime(2018, 4, 19, 14, 59, 0, tzinfo=pytz.timezone('Etc/GMT+5')):
+    #             sql_start = convert_python_time_to_rtc(data_query_start, start_tz) - 31536000
+    #         else:
+    #             sql_start = convert_python_time_to_rtc(data_query_start, start_tz)
+    #         if data_query_end > datetime.datetime(2018, 4, 19, 14, 59, 0, tzinfo=pytz.timezone('Etc/GMT+5')):
+    #             sql_end = convert_python_time_to_rtc(data_query_end, end_tz) - 31536000
+    #         else:
+    #             sql_end = convert_python_time_to_rtc(data_query_end, end_tz)
+    # else:
+    #     dt_col = "Loggertime"
+    #     dt_server_col = "Date"
+    #     sql_start = convert_python_time_to_rtc(data_query_start, start_tz)
+    #     sql_end = convert_python_time_to_rtc(data_query_end, end_tz)
+
     if table in ["davis", "CRDavis"]:
         # The meteobridges streaming this data stream a column of time in UTC
         dt_col = "mbutcdatetime"
         dt_server_col = "servertime"
-        sql_start = data_query_start.astimezone(pytz.utc).strftime("%Y-%m-%d %H:%M:%S")
-        sql_end = data_query_end.astimezone(pytz.utc).strftime("%Y-%m-%d %H:%M:%S")
-    elif table in ["SL157", "SL111", "SL112"]:  # This logger's timestamp is a year off..
-        dt_col = "Loggertime"
-        dt_server_col = "Date"
-        if table == "SL157":  # A year off throughout
-            sql_start = convert_python_time_to_rtc(data_query_start, start_tz) - 31536000
-            sql_end = convert_python_time_to_rtc(data_query_end, end_tz) - 31536000
-        if table == "SL111":  # A year off only for portions
-            if data_query_start == datetime.datetime(2017, 6, 1, 0, 0, 0, tzinfo=pytz.timezone('Etc/GMT+5')):  # unset clock...
-                sql_start = 0
-            elif data_query_start > datetime.datetime(2018, 2, 9, 12, 9, 0, tzinfo=pytz.timezone('Etc/GMT+5')):
-                sql_start = convert_python_time_to_rtc(data_query_start, start_tz) - 31536000
-            else:
-                sql_start = convert_python_time_to_rtc(data_query_start, start_tz)
-            if data_query_end > datetime.datetime(2018, 2, 9, 12, 9, 0, tzinfo=pytz.timezone('Etc/GMT+5')):
-                sql_end = convert_python_time_to_rtc(data_query_end, end_tz) - 31536000
-            else:
-                sql_end = convert_python_time_to_rtc(data_query_end, end_tz)
-        if table == "SL112":  # A year off only for portions
-            if data_query_start > datetime.datetime(2018, 4, 19, 14, 59, 0, tzinfo=pytz.timezone('Etc/GMT+5')):
-                sql_start = convert_python_time_to_rtc(data_query_start, start_tz) - 31536000
-            else:
-                sql_start = convert_python_time_to_rtc(data_query_start, start_tz)
-            if data_query_end > datetime.datetime(2018, 4, 19, 14, 59, 0, tzinfo=pytz.timezone('Etc/GMT+5')):
-                sql_end = convert_python_time_to_rtc(data_query_end, end_tz) - 31536000
-            else:
-                sql_end = convert_python_time_to_rtc(data_query_end, end_tz)
+        sql_start = data_query_start.astimezone('US/Pacific').strftime("%Y-%m-%d %H:%M:%S")
+        sql_end = data_query_end.astimezone('US/Pacific').strftime("%Y-%m-%d %H:%M:%S")
     else:
         dt_col = "Loggertime"
         dt_server_col = "Date"
-        sql_start = convert_python_time_to_rtc(data_query_start, start_tz)
-        sql_end = convert_python_time_to_rtc(data_query_end, end_tz)
+        sql_start = data_query_start.astimezone(pytz.timezone('Etc/GMT+5')).strftime("%Y-%m-%d %H:%M:%S")
+        sql_end = data_query_end.astimezone(pytz.timezone('Etc/GMT+5')).strftime("%Y-%m-%d %H:%M:%S")
 
     # Creating the query text here because the character masking works oddly
     # in the cur.execute function.
     query_text = "SELECT DISTINCT " + dt_col + ", " + dt_server_col + ", " + column + " as data_value" \
                  + " FROM " + table  \
-                 + " WHERE " + column + " IS NOT NULL" \
-                 + " AND " + dt_col + " >= '" + str(sql_start) + "'" \
-                 + " AND " + dt_col + " <= '" + str(sql_end) + "'" \
+                 + " WHERE " + dt_server_col + " IS NOT NULL" \
+                 + " AND " + dt_server_col + " >= '" + str(sql_start) + "'" \
+                 + " AND " + dt_server_col + " <= '" + str(sql_end) + "'" \
                  + " ORDER BY " + dt_server_col + ", " + dt_col \
                  + " ;"
 
