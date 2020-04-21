@@ -13,94 +13,142 @@ import pytz
 import base64
 import sys
 import socket
-import suds
-from suds import client
+from zeep.transports import Transport
+from zeep import Client
+import pandas as pd
 
 # Bring in all of the database connection information.
-from Aquarius.aq_dbinfo import aq_acquisition_url, aq_username, aq_password
+from Aquarius.aq_dbinfo import aq_acq_1page_url, aq_username, aq_password
 
 __author__ = 'Sara Geleskie Damiano'
 __contact__ = 'sdamiano@stroudcenter.org'
 
 
 # Get an authentication token to open the path into the API
-def get_aq_auth_token(username, password, debug=False):
+def get_aq_auth_token(username=aq_username, password=aq_password, debug=False):
     """
     Sets up an authentication token for the soap session
     """
     # Call up the Aquarius Acquisition SOAP API
 
     try:
-        aq_token_client = client.Client(aq_acquisition_url, timeout=30)
-    except Exception, e:
-        print "Error Creating Client: %s" % sys.exc_info()[0]
-        print '%s' % e
-        print "Stopping all program execution"
+        token_transport = Transport(timeout=30)
+        aq_token_client = Client(aq_acq_1page_url, transport=token_transport)
+    except Exception as e:
+        print("Error Creating Client: {}".format(sys.exc_info()[0]))
+        print('{}'.format(e))
+        print("Stopping all program execution")
         sys.exit("Unable to connect to server")
     else:
         try:
-            auth_token = aq_token_client.service.GetAuthToken(username, password)
-            cookie = aq_token_client.options.transport.cookiejar
-        except suds.WebFault, e:
+            auth_token = aq_token_client.service.GetAuthToken(
+                username, password)
+            # cookie = aq_token_client.options.transport.cookiejar
+        except suds.WebFault as e:
             if debug:
-                print "Error Getting Token: %s" % sys.exc_info()[0]
-                print '%s' % e
-                print "Stopping all program execution"
-            sys.exit("No Authentication Token")
+                print("Error Getting Acquisition Token: {}".format(
+                    sys.exc_info()[0]))
+                print('{}'.format(e))
+                print("Stopping all program execution")
+            sys.exit("No Acquisition Authentication Token")
         else:
             if debug:
-                print "Authentication Token: %s" % auth_token
-                print "Session Cookie %s" % cookie
-            return auth_token, cookie
+                print("Acquisition Authentication Token: {}".format(auth_token))
+                # print("Acquisition Session Cookie {}".format(cookie))
+            return auth_token
 
 
+# The client, with a transport to increase the timeout
+transport = Transport(timeout=600)
+aq_client = Client(aq_acq_1page_url, transport=transport)
 # Run the get-authentication function to get a default cookie
-load_auth_token, load_cookie = get_aq_auth_token(aq_username, aq_password)
-aq_client = client.Client(aq_acquisition_url, timeout=1500)
-aq_client.options.transport.cookiejar = load_cookie
+module_token = get_aq_auth_token(aq_username, aq_password)
 
 
-def check_aq_connection(debug=False):
+def check_aq_connection(token=module_token, debug=False):
     start_check = datetime.datetime.now()
-    if debug:
-        print "Checking for valid connection to Aquarius Server"
     try:
-        is_valid = aq_client.service.IsConnectionValid()
-    except Exception, e:
+        is_valid = aq_client.service.IsConnectionValid(
+            _soapheaders={"AQAuthToken": token})
+    except Exception as e:
         is_valid = False
         if debug:
-            print "No valid connection has been established with the Aquarius server."
-            print "Server returned error: %s" % e
+            print("No valid connection to the Aquarius acquisition endpoint.")
+            print("Server returned error: {}".format(e))
     if is_valid:
         end_check = datetime.datetime.now()
         if debug:
-            print "Valid connection returned after %s seconds" % (end_check - start_check)
+            print("Valid connection returned after {} seconds".format(
+                end_check - start_check))
+        # Keep the connection alive!
+        try:
+            if debug:
+                print("Requesting that token {} be kept alive".format(token))
+            aq_client.service.KeepConnectionAlive(
+                _soapheaders={"AQAuthToken": token})
+        except Exception as e:
+            print("Unable to request keep-alive: {}".format(e))
     return is_valid
 
 
-def get_aquarius_timezone(ts_numeric_id, loc_numeric_id=None, debug=False):
-    if check_aq_connection(debug=debug):
-        if loc_numeric_id is None:
-            all_locations = aq_client.service.GetAllLocations().LocationDTO
+def check_and_revalidate_connection(token=module_token, debug=False):
+    global module_token
+    if debug:
+        print("Checking for valid connection to the Aquarius acquisition endpoint; token: {}.".format(
+            module_token))
+    if not check_aq_connection(token, debug):
+        module_token = get_aq_auth_token(aq_username, aq_password, debug)
+        if debug:
+            print("Re-authenticated as {},  New token: {}.".format(aq_username,
+                                                                   module_token))
+        return module_token
+    return token
+
+
+def get_aquarius_location_timezone(loc_numeric_id, debug=False, token=module_token):
+    # Verify the connection is still valid
+    token_to_use = check_and_revalidate_connection(token, debug)
+
+    location_dto = aq_client.service.GetLocation(
+        loc_numeric_id, _soapheaders={"AQAuthToken": token_to_use})
+    utc_offset_float = location_dto.UtcOffset
+    utc_offset_string = '{:+3.0f}'.format(
+        utc_offset_float * -1).strip()
+    timezone = pytz.timezone('Etc/GMT' + utc_offset_string)
+    if debug:
+        print("Timezone for {} ({}): {}".format(
+            location_dto.LocationId, location_dto.Identifier, timezone))
+    return timezone
+
+
+def get_aquarius_timezone(ts_numeric_id, loc_numeric_id=None, debug=False, token=module_token):
+    # Verify the connection is still valid
+    token_to_use = check_and_revalidate_connection(token, debug)
+
+    if loc_numeric_id is None:
+        all_locations = aq_client.service.GetAllLocations(
+            _soapheaders={"AQAuthToken": token_to_use}).LocationDTO
+    else:
+        all_locations = []
+        location_dto = aq_client.service.GetLocation(
+            loc_numeric_id, _soapheaders={"AQAuthToken": token_to_use})
+        all_locations.append(location_dto)
+    for location in all_locations:
+        utc_offset_float = location.UtcOffset
+        utc_offset_string = '{:+3.0f}'.format(
+            utc_offset_float * -1).strip()
+        timezone = pytz.timezone('Etc/GMT' + utc_offset_string)
+        all_descriptions_array = aq_client.service.GetTimeSeriesListForLocation(location.LocationId, _soapheaders={"AQAuthToken": token_to_use}
+                                                                                )
+        try:
+            all_descriptions = all_descriptions_array.TimeSeriesDescription
+        except AttributeError:
+            pass
         else:
-            all_locations = []
-            locdto = aq_client.service.GetLocation(loc_numeric_id)
-            all_locations.append(locdto)
-        for location in all_locations:
-            utc_offset_float = location.UtcOffset
-            utc_offset_string = '{:+3.0f}'.format(utc_offset_float*-1).strip()
-            timezone = pytz.timezone('Etc/GMT'+utc_offset_string)
-            all_descriptions_array = aq_client.service.GetTimeSeriesListForLocation(location.LocationId)
-            try:
-                all_descriptions = all_descriptions_array.TimeSeriesDescription
-            except AttributeError:
-                pass
-            else:
-                for description in all_descriptions:
-                    ts_id = description.AqDataID
-                    if ts_id == ts_numeric_id:
-                        return timezone
-    return None
+            for description in all_descriptions:
+                ts_id = description.AqDataID
+                if ts_id == ts_numeric_id:
+                    return timezone
 
 
 def create_appendable_csv(data_table):
@@ -126,85 +174,120 @@ def create_appendable_csv(data_table):
             data_table.loc[:, 'note'] = ""
 
         # Output a CSV
-        csvdata = data_table.to_csv(header=False, index=False,
-                                    columns=['AQLocalizedTimeStamp', 'data_value', 'flag',
-                                             'grade', 'interpolation', 'approval', 'note'],
-                                    date_format='%Y-%m-%d %H:%M:%S')
+        csv_data = data_table.to_csv(header=False, index=False,
+                                     columns=['AQLocalizedTimeStamp', 'data_value', 'flag',
+                                              'grade', 'interpolation', 'approval', 'note'],
+                                     date_format='%Y-%m-%d %H:%M:%S')
 
+        # convert str to bytes
+        byte_string = bytes(csv_data, 'ascii')
         # Convert the data string into a base64 object
-        csvbytes = base64.b64encode(csvdata)
+        # csv_bytes = base64.b64encode(byte_string).decode('ascii')
+        csv_bytes = base64.b64encode(byte_string)
 
     else:
-        csvbytes = ""
+        csv_bytes = ""
 
-    return csvbytes
+    # return csv_bytes
+    return byte_string
 
 
-def aq_timeseries_append(ts_numeric_id, appendbytes, debug=False):
+def aq_timeseries_append(ts_numeric_id, appendbytes, debug=False, token=module_token):
     """
     Appends data to an aquarius time series given a base64 encoded csv string with the following values:
         datetime(isoformat), value, flag, grade, interpolation, approval, note
     :param ts_numeric_id: The integer primary key of an aquarius time series
     :param appendbytes: Base64 csv string with ISO-datetime, value, flag, grade, interpolation, approval, note
-    :param debug: Says whether or not to issue print statements.
+    :param debug: Says whether or not to issue print(statements.)
+    :param token: A cookie jar with the current authentication cookie to the API client
     :return: The append result from the SOAP client
     """
 
-    # Verify the connection is still valid
-    if check_aq_connection(debug=debug):
+    # Create an empty resute
+    # empty_result = aq_client.factory.create('ns0:AppendResult')
+    empty_result = aq_client.get_type(
+        '{http://schemas.datacontract.org/2004/07/AQAcquisitionService.Dto}AppendResult')
 
-        empty_result = aq_client.factory.create('ns0:AppendResult')
-
-        # Actually append to the Aquarius dataset
-        t3 = datetime.datetime.now()
-        if len(appendbytes) > 0:
-            for attempt in range(10):
-                try:
-                    append_result = aq_client.service.AppendTimeSeriesFromBytes2(
-                        long(ts_numeric_id), appendbytes, aq_username)
-                except suds.WebFault, e:
-                    if debug:
-                        print "      Error: %s" % sys.exc_info()[0]
-                        print '      %s' % e
-                        t4 = datetime.datetime.now()
-                        print "      API execution took %s" % (t4 - t3)
-                    empty_result.NumPointsAppended = 0
-                    empty_result.AppendToken = 0
-                    empty_result.TsIdentifier = '"Error: "' + str(e) + '"'
-                    append_result = empty_result
-                    break
-                except socket.timeout, e:
-                    if debug:
-                        print "      Error: %s" % sys.exc_info()[0]
-                        print '      %s' % e
-                        print '      Retrying in 30 seconds'
-                    time.sleep(30)
-                else:
-                    if debug:
-                        print append_result
-                        t4 = datetime.datetime.now()
-                        print "      API execution took %s" % (t4 - t3)
-                        print "SUCCESS!"
-                    break
-            else:
+    # Actually append to the Aquarius dataset
+    t3 = datetime.datetime.now()
+    if len(appendbytes) > 0:
+        for attempt in range(10):
+            try:
+                # Verify the connection is still valid
+                token_to_use = check_and_revalidate_connection(token, debug)
+                append_result = aq_client.service.AppendTimeSeriesFromBytes2(
+                    ts_numeric_id, appendbytes, aq_username, _soapheaders={"AQAuthToken": token_to_use})
                 if debug:
-                    print "      Error: %s" % sys.exc_info()[0]
-                    print '      10 retries attempted'
-                    t4 = datetime.datetime.now()
-                    print "      API execution took %s" % (t4 - t3)
-                empty_result.NumPointsAppended = 0
-                empty_result.AppendToken = 0
-                empty_result.TsIdentifier = '"Error: "' + sys.exc_info()[0] + '"'
-                append_result = empty_result
-        else:
+                    print("Append result: {}".format(append_result))
+                if pd.notna(append_result.AppendToken):
+                    break
+            except suds.WebFault as e:
+                if debug:
+                    print("      Error: {}".format(sys.exc_info()[0]))
+                    print('      {}'.format(e))
+                    print('      Retrying in 30 seconds')
+                time.sleep(30)
+                #     t4 = datetime.datetime.now()
+                #     print("      API execution took {}".format(t4 - t3))
+                # empty_result.NumPointsAppended = 0
+                # empty_result.AppendToken = 0
+                # empty_result.TsIdentifier = '\"Error: \"{0}\"'.format(
+                #     str(e))
+                # append_result = empty_result
+                # break
+            except socket.timeout as e:
+                if debug:
+                    print("      Socket timeout: {}".format(sys.exc_info()[0]))
+                    print('      {}'.format(e))
+                    print('      Retrying in 30 seconds')
+                time.sleep(30)
+            except Exception as e:
+                if debug:
+                    print("      Error: {}".format(sys.exc_info()[0]))
+                    print('      {}'.format(e))
+                    print('      Retrying in 30 seconds')
+                time.sleep(30)
+        else:  # if we never got to the "break" for a successful result
             if debug:
-                print "      No data appended from this query."
+                print("      Error: {}".format(sys.exc_info()[0]))
+                print('      10 retries attempted')
+                t4 = datetime.datetime.now()
+                print("      API execution took {}".format(t4 - t3))
             empty_result.NumPointsAppended = 0
             empty_result.AppendToken = 0
-            empty_result.TsIdentifier = ""
+            empty_result.TsIdentifier = '\"Error: \"{0}\"'.format(
+                sys.exc_info()[0])
             append_result = empty_result
-
-        return append_result
-
     else:
-        return None
+        if debug:
+            print("      No data appended from this query.")
+        empty_result.NumPointsAppended = 0
+        empty_result.AppendToken = 0
+        empty_result.TsIdentifier = ""
+        append_result = empty_result
+
+    return append_result
+
+
+def export_data_by_month(chunk_of_data, data_column, timeseries_id_numeric, debug=False, token=module_token):
+    # Output a CSV
+    csv_data = chunk_of_data.rename(
+        columns={data_column: 'data_value'}).dropna(
+        axis=0, subset=['data_value']).reindex(columns=['AQLocalizedTimeStamp', 'data_value', 'flag',
+                                                        'grade', 'interpolation', 'approval', 'note']
+                                               ).to_csv(
+        header=False, index=False,
+        date_format='%Y-%m-%d %H:%M:%S'
+    )
+    # print(csv_data[0:60])
+    # convert str to bytes
+    byte_string = bytes(csv_data, 'ascii')
+    # Convert the data string into a base64 object
+    csv_bytes = base64.b64encode(byte_string).decode('ascii')
+    result = aq_timeseries_append(
+        timeseries_id_numeric, csv_bytes, False, token=token)
+    if result.NumPointsAppended > 0:
+        print("Year: {}    Month {}".format(
+            chunk_of_data.index.year[0], chunk_of_data.index.month[0]))
+        print(result)
+        time.sleep(15)

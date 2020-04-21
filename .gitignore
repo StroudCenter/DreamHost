@@ -5,3 +5,6 @@
 *dbinfo.py
 */*dbinfo.py
 *.pyc
+.vscode
+.idea
+/sync.ffs_db

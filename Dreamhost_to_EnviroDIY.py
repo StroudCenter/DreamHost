@@ -23,7 +23,8 @@ __author__ = 'Sara Geleskie Damiano'
 __contact__ = 'sdamiano@stroudcenter.org'
 
 # Set up initial parameters - these are rewritten when run from the command prompt.
-past_hours_to_append = None  # Sets number of hours in the past to append.  Use None for all time
+# Sets number of hours in the past to append.  Use None for all time
+past_hours_to_append = None
 # append_start = "2019-09-16 00:00:00"  # Sets start time for the append **in EST**, use None for all time
 append_start = None  # Sets start time for the append **in EST**, use None for all time
 # append_end = "2019-04-18 12:00:00"  # Sets end time for the append **in EST**, use None for all time
@@ -34,7 +35,8 @@ column = None  # Selects a single column to append from, often a variable code, 
 
 
 # Set up a parser for command line options
-parser = argparse.ArgumentParser(description='This script appends data from Dreamhost to Aquarius.')
+parser = argparse.ArgumentParser(
+    description='This script appends data from Dreamhost to Aquarius.')
 parser.add_argument('--debug', action='store_true',
                     help='Turn debugging on')
 parser.add_argument('--nolog', action='store_false',
@@ -82,23 +84,25 @@ def start_log():
     script_directory = os.path.dirname(os.path.realpath(__file__))
 
     if debug:
-        print "Now running script: %s" % script_name_with_path
-        print "Script started at %s" % start_log_dt_loc
+        print("Now running script: {}".format(script_name_with_path))
+        print("Script started at {}".format(start_log_dt_loc))
 
     # Open file for logging
     if Log_to_file:
-        logfile = script_directory + "\EnviroDIY\AppendLogs\AppendLog_" + start_log_dt_loc.strftime("%Y%m%d") + ".txt"
+        logfile = "{0}\\EnviroDIY\\AppendLogs\\AppendLog_{1}.txt".format(script_directory,
+                                                                         start_log_dt_loc.strftime("%Y%m%d"))
         if debug:
-            print "Log being written to: %s" % logfile
+            print("Log being written to: {}".format(logfile))
         open_log_file = open(logfile, "a+")
 
         open_log_file.write(
             "*******************************************************************************************************\n")
-        open_log_file.write("Script: %s \n" % script_name_with_path)
+        open_log_file.write("Script: {} \n".format(script_name_with_path))
         open_log_file.write(
             "*******************************************************************************************************\n")
         open_log_file.write("\n")
-        open_log_file.write("Script started at %s \n \n" % start_log_dt_loc)
+        open_log_file.write(
+            "Script started at {} \n \n".format(start_log_dt_loc))
     else:
         open_log_file = ""
 
@@ -113,12 +117,13 @@ def end_log(open_log_file, start_log_dt_utc):
 
     # Close out the text file
     if debug:
-        print "Script completed at %s" % end_datetime_loc
-        print "Total time for script: %s" % runtime
+        print("Script completed at {}".format(end_datetime_loc))
+        print("Total time for script: {}".format(runtime))
     if Log_to_file:
         open_log_file.write("\n")
-        open_log_file.write("Script completed at %s \n" % end_datetime_loc)
-        open_log_file.write("Total time for script: %s \n" % runtime)
+        open_log_file.write(
+            "Script completed at {} \n".format(end_datetime_loc))
+        open_log_file.write("Total time for script: {} \n".format(runtime))
         open_log_file.write(
             "*******************************************************************************************************\n")
         open_log_file.write("\n \n")
@@ -134,18 +139,22 @@ text_file, start_datetime_utc = start_log()
 if append_start is None:
     append_start_dt = None
 else:
-    append_start_dt_naive = datetime.datetime.strptime(append_start, "%Y-%m-%d %H:%M:%S")
-    append_start_dt = append_start_dt_naive.replace(tzinfo=eastern_standard_time)
+    append_start_dt_naive = datetime.datetime.strptime(
+        append_start, "%Y-%m-%d %H:%M:%S")
+    append_start_dt = append_start_dt_naive.replace(
+        tzinfo=eastern_standard_time)
 
 if append_end is None:
     append_end_dt = None
 else:
-    append_end_dt_naive = datetime.datetime.strptime(append_end, "%Y-%m-%d %H:%M:%S")
+    append_end_dt_naive = datetime.datetime.strptime(
+        append_end, "%Y-%m-%d %H:%M:%S")
     append_end_dt = append_end_dt_naive.replace(tzinfo=eastern_standard_time)
 
 if append_start is None and append_end is None and past_hours_to_append is not None:
     append_end_dt = None
-    append_start_utc = start_datetime_utc - datetime.timedelta(hours=past_hours_to_append)
+    append_start_utc = start_datetime_utc - \
+        datetime.timedelta(hours=past_hours_to_append)
     append_start_dt = append_start_utc.astimezone(eastern_standard_time)
 
 
@@ -158,14 +167,16 @@ if Log_to_file:
     text_file.write("%s series found with corresponding time series on the EnviroDIY data portal \n \n"
                     % (len(DIYSeries.index)))
 
-DIYData.sort_values(by=['TableName', 'EnviroDIYToken', 'SamplingFeatureGUID', 'timestamp'], inplace=True)
+DIYData.sort_values(by=['TableName', 'EnviroDIYToken',
+                        'SamplingFeatureGUID', 'timestamp'], inplace=True)
 
 if len(DIYData.index) > 0:
     DIYData['AppendSuccessful'] = 0
     DIYData['AppendFailed'] = 1
 
     if Log_to_file:
-        text_file.write("Site Code, Table, # Successful Appends, # Unsuccessful Appends, Max Offset between Server and Logger, Max Timestamp Correction  \n")
+        text_file.write(
+            "Site Code, Table, # Successful Appends, # Unsuccessful Appends, Max Offset between Server and Logger, Max Timestamp Correction  \n")
 
     for name, group in DIYData.groupby(['EnviroDIYToken', 'SamplingFeatureGUID', 'timestamp']):
         json_string = '{\r\n"sampling_feature": "'
@@ -184,14 +195,14 @@ if len(DIYData.index) > 0:
         while response == '':
             try:
                 response = requests.post(url='http://data.envirodiy.org/api/data-stream/',
-                                         headers={"TOKEN": group.iloc[0].EnviroDIYToken, 'Content-Type': 'application/json'},
+                                         headers={
+                                             "TOKEN": group.iloc[0].EnviroDIYToken, 'Content-Type': 'application/json'},
                                          data=json_string)
             except:
                 if debug:
-                    print "Waiting to retry..."
+                    print("Waiting to retry...")
                 time.sleep(5)
                 continue
-
 
         for idx, row in group.iterrows():
             if response.status_code <= 205:
@@ -199,13 +210,14 @@ if len(DIYData.index) > 0:
                 DIYData.loc[idx, ['AppendFailed']] = 0
 
         if debug:
-            print group.iloc[0].TableName, "-", group.iloc[0].timestamp.isoformat(), "-", response.status_code
+            print(group.iloc[0].TableName, "-",
+                  group.iloc[0].timestamp.isoformat(), "-", response.status_code)
             # print "    ", response.request.method, response.request.path_url
             # print "    ", response.request.headers
             # print "    ", response.request.body
             # print "    ", "Response status code: %s" % response.status_code
             if response.status_code > 205:
-                print "    ", response.text
+                print("    ", response.text)
 
     DIYData["NumberSuccessfulAppends"] = \
         DIYData.groupby(['EnviroDIYToken', 'SamplingFeatureGUID']
@@ -216,10 +228,10 @@ if len(DIYData.index) > 0:
 
     if Log_to_file:
         for name, group in DIYData.groupby(['EnviroDIYToken', 'SamplingFeatureGUID']):
-            text_file.write("%s, %s, %s, %s, %s, %s  \n" %
-                            (group.iloc[0].SiteCode, group.iloc[0].TableName,
-                             group.iloc[0].NumberSuccessfulAppends, group.iloc[0].NumberFailedAppends,
-                             group.server_offset.max(), group.time_correction.max()))
+            text_file.write("{}, {}, {}, {}, {}, {}  \n"
+                            .format(group.iloc[0].SiteCode, group.iloc[0].TableName,
+                                    group.iloc[0].NumberSuccessfulAppends, group.iloc[0].NumberFailedAppends,
+                                    group.server_offset.max(), group.time_correction.max()))
 
 # Close out the text file
 end_log(text_file, start_datetime_utc)
